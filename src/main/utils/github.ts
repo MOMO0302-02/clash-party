@@ -1,6 +1,5 @@
-import { createWriteStream, createReadStream, existsSync, rmSync } from 'fs'
+import { chmodSync, createWriteStream, createReadStream, existsSync, renameSync, rmSync } from 'fs'
 import { writeFile } from 'fs/promises'
-import { execSync } from 'child_process'
 import { platform } from 'os'
 import { join } from 'path'
 import { createGunzip } from 'zlib'
@@ -19,6 +18,14 @@ const GITHUB_PROXIES = [
   'https://down.clashparty.org',
   'https://download.mihomo.party'
 ]
+
+function cleanupTempFile(path: string): void {
+  try {
+    if (existsSync(path)) rmSync(path)
+  } catch (error) {
+    log.warn(`Failed to remove temporary file ${path}`, error)
+  }
+}
 
 function buildDownloadUrls(githubUrl: string, proxyPref = ''): string[] {
   if (proxyPref === 'direct') return [githubUrl]
@@ -139,6 +146,11 @@ async function downloadGitHubAsset(url: string, outputPath: string): Promise<voi
         responseType: 'arraybuffer',
         timeout: 30000
       })
+      // chromeRequest 对任何状态码都 resolve，所以这里必须自己判断。否则镜像返回的
+      // 404/502 错误页会被当成下载成功写进内核文件，而且直接 return、不再尝试后续镜像。
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`)
+      }
       await writeFile(outputPath, Buffer.from(response.data as Buffer))
       log.debug(`Successfully downloaded asset to ${outputPath}`)
       return
@@ -207,39 +219,63 @@ export async function installMihomoCore(version: string): Promise<void> {
       }
     } else {
       // 处理.gz 文件
+      // 先解压到临时文件再原子替换：直接往 targetPath 写的话，解压中途失败
+      // 会把原本可用的内核截断成半个文件，用户连回退都没得回退。
       log.debug(`Extracting GZ file ${tempZip}`)
+      const stagingPath = `${targetPath}.download`
       const readStream = createReadStream(tempZip)
-      const writeStream = createWriteStream(targetPath)
+      const writeStream = createWriteStream(stagingPath)
 
-      await new Promise<void>((resolve, reject) => {
-        const onError = (error: Error) => {
-          log.error('Gzip decompression failed', error)
-          reject(new Error(`Gzip decompression failed: ${error.message}`))
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const gunzip = createGunzip()
+          const onError = (error: Error): void => {
+            log.error('Gzip decompression failed', error)
+            readStream.destroy()
+            gunzip.destroy()
+            writeStream.destroy()
+            reject(new Error(`Gzip decompression failed: ${error.message}`))
+          }
+
+          readStream.on('error', onError)
+          gunzip.on('error', onError)
+          writeStream.on('error', onError)
+
+          readStream
+            .pipe(gunzip)
+            .pipe(writeStream)
+            .on('finish', () => {
+              log.debug('Gunzip finished')
+              resolve()
+            })
+        })
+
+        // 用 chmodSync 而不是拼 shell 命令：macOS 的数据目录是
+        // ~/Library/Application Support/... ，路径里带空格，未加引号的
+        // `chmod 755 <path>` 必然失败，而失败只被 warn 掉，用户拿到的是
+        // 一个没有执行权限的内核，表现为「装好了但起不来」。
+        chmodSync(stagingPath, 0o755)
+        log.debug('Chmod binary finished')
+        renameSync(stagingPath, targetPath)
+      } catch (error) {
+        try {
+          if (existsSync(stagingPath)) rmSync(stagingPath)
+        } catch {
+          // ignore
         }
-
-        readStream
-          .pipe(createGunzip().on('error', onError))
-          .pipe(writeStream)
-          .on('finish', () => {
-            log.debug('Gunzip finished')
-            try {
-              execSync(`chmod 755 ${targetPath}`)
-              log.debug('Chmod binary finished')
-            } catch (chmodError) {
-              log.warn('Failed to chmod binary', chmodError)
-            }
-            resolve()
-          })
-          .on('error', onError)
-      })
+        throw error
+      }
     }
 
     // 清理临时文件
     log.debug(`Cleaning up temporary file ${tempZip}`)
-    rmSync(tempZip)
+    cleanupTempFile(tempZip)
 
     log.info(`Successfully installed mihomo core version ${version}`)
   } catch (error) {
+    // 解压失败时下载的压缩包会一直留在内核目录里，每次重试再落一份
+    cleanupTempFile(join(mihomoCoreDir(), `temp-core.zip`))
+    cleanupTempFile(join(mihomoCoreDir(), `temp-core.gz`))
     log.error('Failed to install mihomo core', error)
     throw new Error(
       `Failed to install core: ${error instanceof Error ? error.message : String(error)}`
