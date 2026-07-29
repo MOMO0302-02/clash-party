@@ -194,6 +194,9 @@ const EditTunnelsModal: React.FC<Props> = (props) => {
   const [newTunnel, setNewTunnel] = useState<TunnelItem>(defaultTunnel)
   const [editingIndex, setEditingIndex] = useState<number | undefined>()
   const [isLoading, setIsLoading] = useState(true)
+  // 保存会整份重写订阅文件，所以只要没成功读到原文就绝不允许保存，
+  // 否则 profile 还是初始的 {}，一保存就把用户的订阅内容清空。
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const addressInvalid = useMemo(() => {
     if (!newTunnel.address.trim()) return false
@@ -210,14 +213,21 @@ const EditTunnelsModal: React.FC<Props> = (props) => {
   useEffect(() => {
     const loadContent = async (): Promise<void> => {
       setIsLoading(true)
+      setLoadFailed(false)
       try {
         const content = await getProfileStr(id)
         const parsed = yaml.load(content)
-        const nextProfile = parsed && typeof parsed === 'object' ? (parsed as ProfileYaml) : {}
+        // 解析结果不是对象时（例如订阅是 age 加密的，磁盘上存的是密文），
+        // 旧实现静默退化成 {} 且不提示，保存就会把整份订阅写没。
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Profile is not a YAML mapping')
+        }
+        const nextProfile = parsed as ProfileYaml
         setProfile(nextProfile)
         setTunnels(parseTunnels(nextProfile.tunnels))
         setProxyNames(collectProxyNames(nextProfile))
       } catch (e) {
+        setLoadFailed(true)
         toast.error(
           t('profiles.editTunnels.loadError') + ': ' + (e instanceof Error ? e.message : String(e))
         )
@@ -282,6 +292,9 @@ const EditTunnelsModal: React.FC<Props> = (props) => {
   }
 
   const handleSave = async (): Promise<void> => {
+    // 原文没读到就直接拒绝写回，避免用空对象覆盖订阅
+    if (isLoading || loadFailed) return
+
     try {
       const nextProfile: ProfileYaml = { ...profile }
       if (tunnels.length > 0) {
@@ -474,7 +487,12 @@ const EditTunnelsModal: React.FC<Props> = (props) => {
           <Button size="sm" variant="light" onPress={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button size="sm" color="primary" onPress={handleSave}>
+          <Button
+            size="sm"
+            color="primary"
+            isDisabled={isLoading || loadFailed}
+            onPress={handleSave}
+          >
             {t('common.save')}
           </Button>
         </ModalFooter>
