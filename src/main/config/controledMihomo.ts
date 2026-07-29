@@ -67,6 +67,12 @@ export async function patchControledMihomoConfig(patch: Partial<IMihomoConfig>):
       JSON.stringify(controledMihomoConfig || cloneDefaultControledMihomoConfig())
     ) as Partial<IMihomoConfig>
     const nextPatch = JSON.parse(JSON.stringify(patch)) as Partial<IMihomoConfig>
+    // JSON 序列化会丢掉值为 undefined 的键，而这里 undefined 表示「删除该键」，需要补回
+    for (const key of Object.keys(patch)) {
+      if ((patch as Record<string, unknown>)[key] === undefined) {
+        ;(nextPatch as Record<string, unknown>)[key] = undefined
+      }
+    }
     let restoreDnsState = false
 
     // 当模式从 direct 切换到 rule/global 时，恢复之前保存的 DNS 状态
