@@ -2,7 +2,7 @@ import { copyFile, rm, writeFile } from 'fs/promises'
 import path from 'path'
 import { existsSync } from 'fs'
 import os from 'os'
-import { exec, execFile, execSync, spawn } from 'child_process'
+import { exec, execSync, spawn } from 'child_process'
 import { promisify } from 'util'
 import { createHash } from 'crypto'
 import { app, shell } from 'electron'
@@ -49,11 +49,9 @@ async function tryDownload(
   for (const url of urls) {
     try {
       const res = await chromeRequest.get(url, options)
-      // chromeRequest 只在网络层出错时 reject，HTTP 4xx/5xx 一样会 resolve。
-      // 不判断状态码的话，某个镜像返回的错误页会被当成正文直接返回，
-      // 后面的镜像再也不会被尝试，调用方拿到的是一段 HTML。
+      // 代理源限流/失效时会以 200 以外的状态返回错误页，必须当作失败才能继续尝试下一个源
       if (res.status < 200 || res.status >= 300) {
-        throw new Error(`HTTP ${res.status} ${res.statusText} from ${url}`)
+        throw new Error(`Request failed with status ${res.status}: ${url}`)
       }
       return res
     } catch (e) {
@@ -63,10 +61,19 @@ async function tryDownload(
   throw lastError
 }
 
+type UpdaterProxy = { protocol: 'http'; host: string; port: number } | false
+
+// 用户关闭混合端口时配置里写的是 0（不是 undefined），解构默认值挡不住。
+// 直接拿 0 去拼代理会打到 127.0.0.1:0，检查更新和下载更新都必然失败，
+// 所以端口未启用时要显式走直连。
+function updaterProxy(mixedPort: number): UpdaterProxy {
+  return mixedPort ? { protocol: 'http', host: '127.0.0.1', port: mixedPort } : false
+}
+
 async function getGitHubAssetSha256(
   version: string,
   file: string,
-  proxy: { protocol: 'http'; host: string; port: number }
+  proxy: UpdaterProxy
 ): Promise<string> {
   const releaseTag = encodeURIComponent(`v${version}`)
   const res = await chromeRequest.get<GitHubRelease>(
@@ -96,10 +103,14 @@ export async function checkUpdate(): Promise<IAppVersion | undefined> {
     'https://github.com/mihomo-party-org/mihomo-party/releases/latest/download/latest.yml'
   const res = await tryDownload(buildDownloadUrls(githubUrl, githubProxy), {
     headers: { 'Content-Type': 'application/octet-stream' },
-    proxy: { protocol: 'http', host: '127.0.0.1', port: mixedPort },
+    proxy: updaterProxy(mixedPort),
     responseType: 'text'
   })
   const latest = parse(res.data as string) as IAppVersion
+  // 错误页也能被 YAML 解析成对象（如 `404: Not Found`），不校验会让 compareVersions 崩在 undefined.replace
+  if (!latest || typeof latest.version !== 'string') {
+    throw new Error('Invalid latest.yml from update source')
+  }
   const currentVersion = app.getVersion()
   if (compareVersions(latest.version, currentVersion) > 0) {
     return latest
@@ -129,11 +140,9 @@ function compareVersions(a: string, b: string): number {
 export function downloadAndInstallUpdate(version: string): Promise<void> {
   if (updateInstallPromise) return updateInstallPromise
 
-  // 成功时也要清空：pkg 分支在 osascript 失败后会退回 shell.openPath 并正常 resolve，
-  // 此时应用并没有退出。若不清空，之后再点「更新」拿到的都是这个已完成的 promise，
-  // 按钮变成永远没反应。
-  updateInstallPromise = installUpdate(version).finally(() => {
+  updateInstallPromise = installUpdate(version).catch((error) => {
     updateInstallPromise = undefined
+    throw error
   })
   return updateInstallPromise
 }
@@ -167,7 +176,7 @@ async function installUpdate(version: string): Promise<void> {
       file = file.replace('macos', 'catalina')
     }
   }
-  const proxy = { protocol: 'http' as const, host: '127.0.0.1', port: mixedPort }
+  const proxy = updaterProxy(mixedPort)
   try {
     if (!existsSync(path.join(dataDir(), file))) {
       let expectedHash: string
@@ -272,16 +281,10 @@ async function installUpdate(version: string): Promise<void> {
     }
     if (file.endsWith('.pkg')) {
       try {
-        const execFilePromise = promisify(execFile)
-        // 用单引号包住路径并转义内部单引号，交给 shell 的是一个完整参数。
-        // 旧写法 `.replace(' ', '\\\\ ')` 用字符串做模式，只会转义第一个空格，
-        // 而 macOS 的数据目录是 ~/Library/Application Support/... ，空格不止一个。
-        const pkgPath = path.join(dataDir(), file)
-        const shellCommand = `installer -pkg '${pkgPath.replace(/'/g, `'\\''`)}' -target /`
-        // AppleScript 字符串里的反斜杠和双引号都要转义，否则命令会被截断
-        const appleScriptLiteral = shellCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-        const command = `do shell script "${appleScriptLiteral}" with administrator privileges`
-        await execFilePromise('osascript', ['-e', command])
+        const execPromise = promisify(exec)
+        const shell = `installer -pkg ${path.join(dataDir(), file).replace(' ', '\\\\ ')} -target /`
+        const command = `do shell script "${shell}" with administrator privileges`
+        await execPromise(`osascript -e '${command}'`)
         app.relaunch()
         app.quit()
       } catch {
