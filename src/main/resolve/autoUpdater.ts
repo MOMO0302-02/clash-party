@@ -2,7 +2,7 @@ import { copyFile, rm, writeFile } from 'fs/promises'
 import path from 'path'
 import { existsSync } from 'fs'
 import os from 'os'
-import { exec, execSync, spawn } from 'child_process'
+import { exec, execFile, execSync, spawn } from 'child_process'
 import { promisify } from 'util'
 import { createHash } from 'crypto'
 import { app, shell } from 'electron'
@@ -48,7 +48,14 @@ async function tryDownload(
   let lastError: unknown
   for (const url of urls) {
     try {
-      return await chromeRequest.get(url, options)
+      const res = await chromeRequest.get(url, options)
+      // chromeRequest 只在网络层出错时 reject，HTTP 4xx/5xx 一样会 resolve。
+      // 不判断状态码的话，某个镜像返回的错误页会被当成正文直接返回，
+      // 后面的镜像再也不会被尝试，调用方拿到的是一段 HTML。
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`HTTP ${res.status} ${res.statusText} from ${url}`)
+      }
+      return res
     } catch (e) {
       lastError = e
     }
@@ -122,9 +129,11 @@ function compareVersions(a: string, b: string): number {
 export function downloadAndInstallUpdate(version: string): Promise<void> {
   if (updateInstallPromise) return updateInstallPromise
 
-  updateInstallPromise = installUpdate(version).catch((error) => {
+  // 成功时也要清空：pkg 分支在 osascript 失败后会退回 shell.openPath 并正常 resolve，
+  // 此时应用并没有退出。若不清空，之后再点「更新」拿到的都是这个已完成的 promise，
+  // 按钮变成永远没反应。
+  updateInstallPromise = installUpdate(version).finally(() => {
     updateInstallPromise = undefined
-    throw error
   })
   return updateInstallPromise
 }
@@ -263,10 +272,16 @@ async function installUpdate(version: string): Promise<void> {
     }
     if (file.endsWith('.pkg')) {
       try {
-        const execPromise = promisify(exec)
-        const shell = `installer -pkg ${path.join(dataDir(), file).replace(' ', '\\\\ ')} -target /`
-        const command = `do shell script "${shell}" with administrator privileges`
-        await execPromise(`osascript -e '${command}'`)
+        const execFilePromise = promisify(execFile)
+        // 用单引号包住路径并转义内部单引号，交给 shell 的是一个完整参数。
+        // 旧写法 `.replace(' ', '\\\\ ')` 用字符串做模式，只会转义第一个空格，
+        // 而 macOS 的数据目录是 ~/Library/Application Support/... ，空格不止一个。
+        const pkgPath = path.join(dataDir(), file)
+        const shellCommand = `installer -pkg '${pkgPath.replace(/'/g, `'\\''`)}' -target /`
+        // AppleScript 字符串里的反斜杠和双引号都要转义，否则命令会被截断
+        const appleScriptLiteral = shellCommand.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        const command = `do shell script "${appleScriptLiteral}" with administrator privileges`
+        await execFilePromise('osascript', ['-e', command])
         app.relaunch()
         app.quit()
       } catch {
