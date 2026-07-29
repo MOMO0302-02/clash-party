@@ -1,4 +1,12 @@
+import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// dirs.ts 用 path.join 拼路径，在 Windows 上会得到反斜杠分隔符。
+// 断言里不能写死 POSIX 字面量，否则整个用例只在类 Unix 平台通过。
+const APP_DATA = path.join(path.sep, 'tmp', 'app-data')
+const HOME = path.join(path.sep, 'tmp', 'home')
+const EXE_DIR = path.join(path.sep, 'tmp', 'runtime', 'Electron.app', 'Contents', 'MacOS')
+const EXE = path.join(EXE_DIR, 'Electron')
 
 let packaged = false
 let portable = false
@@ -27,7 +35,7 @@ vi.mock('fs', async (importOriginal) => {
   const original = await importOriginal<typeof import('fs')>()
   return {
     ...original,
-    existsSync: (value: string) => portable && value.endsWith('/PORTABLE')
+    existsSync: (value: string) => portable && path.basename(value) === 'PORTABLE'
   }
 })
 
@@ -38,10 +46,10 @@ beforeEach(() => {
   portable = false
   appName = 'mihomo-party'
   Object.assign(paths, {
-    appData: '/tmp/app-data',
-    userData: '/tmp/app-data/mihomo-party',
-    home: '/tmp/home',
-    exe: '/tmp/runtime/Electron.app/Contents/MacOS/Electron'
+    appData: APP_DATA,
+    userData: path.join(APP_DATA, 'mihomo-party'),
+    home: HOME,
+    exe: EXE
   })
   setPath.mockClear()
   setName.mockClear()
@@ -56,7 +64,7 @@ describe('configureAppPaths', () => {
     configureAppPaths()
 
     expect(setName).toHaveBeenCalledWith('mihomo-party-dev')
-    expect(paths.userData).toBe('/tmp/app-data/mihomo-party-dev')
+    expect(paths.userData).toBe(path.join(APP_DATA, 'mihomo-party-dev'))
   })
 
   it('leaves packaged stable and dev-release builds on production paths', async () => {
@@ -66,7 +74,7 @@ describe('configureAppPaths', () => {
 
     expect(setName).not.toHaveBeenCalled()
     expect(setPath).not.toHaveBeenCalled()
-    expect(paths.userData).toBe('/tmp/app-data/mihomo-party')
+    expect(paths.userData).toBe(path.join(APP_DATA, 'mihomo-party'))
   })
 
   it('keeps portable userData precedence over local development isolation', async () => {
@@ -75,10 +83,7 @@ describe('configureAppPaths', () => {
     configureAppPaths()
 
     expect(setName).toHaveBeenCalledWith('mihomo-party-dev')
-    expect(paths.userData).toBe('/tmp/runtime/Electron.app/Contents/MacOS/data')
-    expect(setPath).toHaveBeenLastCalledWith(
-      'userData',
-      '/tmp/runtime/Electron.app/Contents/MacOS/data'
-    )
+    expect(paths.userData).toBe(path.join(EXE_DIR, 'data'))
+    expect(setPath).toHaveBeenLastCalledWith('userData', path.join(EXE_DIR, 'data'))
   })
 })
