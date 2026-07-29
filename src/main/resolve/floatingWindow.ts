@@ -54,13 +54,26 @@ async function createFloatingWindow(): Promise<void> {
       }
     }
 
-    floatingWindow = new BrowserWindow(windowOptions)
+    const win = new BrowserWindow(windowOptions)
+    floatingWindow = win
     floatingWindowState.manage(floatingWindow)
 
     // 事件监听器
     floatingWindow.webContents.on('render-process-gone', (_, details) => {
       logError('Render process gone', details.reason)
-      floatingWindow = null
+      // 只丢引用不销毁的话，屏幕上会残留一个无边框、置顶、不在任务栏且 closable: false 的幽灵窗，
+      // 用户既关不掉也找不到，只能重启应用
+      if (!win.isDestroyed()) {
+        win.destroy()
+      }
+    })
+
+    // 窗口销毁后必须清掉引用，否则 isVisible() 之类的调用会作用在已销毁窗口上抛错；
+    // 判断 win 是为了避免旧窗口的 closed 事件把新建窗口的引用清掉
+    win.on('closed', () => {
+      if (floatingWindow === win) {
+        floatingWindow = null
+      }
     })
 
     floatingWindow.on('ready-to-show', () => {

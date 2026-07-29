@@ -30,6 +30,15 @@ function hashRuntimeConfig(runtimeConfig: string): string {
   return createHash('sha256').update(runtimeConfig).digest('hex')
 }
 
+// chromeRequest 对任何状态码都会 resolve，不校验状态码的话 token 失效（401/403）会被当成成功：
+// 错误响应体被当作「远端没有这个 gist」，上传也「成功」，哈希被记为已同步后就再也不会重试
+function assertGithubOk(res: chromeRequest.Response, action: string): void {
+  if (res.status < 200 || res.status >= 300) {
+    const detail = typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+    throw new Error(`GitHub API ${action} failed with status ${res.status}: ${detail}`)
+  }
+}
+
 async function listGists(token: string): Promise<GistInfo[]> {
   const { 'mixed-port': port = DEFAULT_MIHOMO_PORTS.mixed } = await getControledMihomoConfig()
   const res = await chromeRequest.get('https://api.github.com/gists', {
@@ -45,12 +54,13 @@ async function listGists(token: string): Promise<GistInfo[]> {
     },
     responseType: 'json'
   })
+  assertGithubOk(res, 'list gists')
   return Array.isArray(res.data) ? res.data : []
 }
 
 async function createGist(token: string, content: string): Promise<void> {
   const { 'mixed-port': port = DEFAULT_MIHOMO_PORTS.mixed } = await getControledMihomoConfig()
-  await chromeRequest.post(
+  const res = await chromeRequest.post(
     'https://api.github.com/gists',
     {
       description: 'Auto Synced Clash Party Runtime Config',
@@ -70,11 +80,12 @@ async function createGist(token: string, content: string): Promise<void> {
       }
     }
   )
+  assertGithubOk(res, 'create gist')
 }
 
 async function updateGist(token: string, id: string, content: string): Promise<void> {
   const { 'mixed-port': port = DEFAULT_MIHOMO_PORTS.mixed } = await getControledMihomoConfig()
-  await chromeRequest.patch(
+  const res = await chromeRequest.patch(
     `https://api.github.com/gists/${id}`,
     {
       description: 'Auto Synced Clash Party Runtime Config',
@@ -93,6 +104,7 @@ async function updateGist(token: string, id: string, content: string): Promise<v
       }
     }
   )
+  assertGithubOk(res, 'update gist')
 }
 
 export async function getGistUrl(): Promise<string> {
