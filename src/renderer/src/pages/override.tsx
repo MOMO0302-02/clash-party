@@ -70,8 +70,11 @@ const Override: React.FC = () => {
         const newOrder = sortedItems.slice()
         const activeIndex = newOrder.findIndex((item) => item.id === active.id)
         const overIndex = newOrder.findIndex((item) => item.id === over.id)
-        newOrder.splice(activeIndex, 1)
-        newOrder.splice(overIndex, 0, items[activeIndex])
+        if (activeIndex === -1 || overIndex === -1) return
+        // 必须插回从 newOrder 里移除的那一项：items 与 sortedItems 会在写入失败时分叉，
+        // 用 items[activeIndex] 会插入错误的元素，导致一项重复、一项丢失
+        const [movedItem] = newOrder.splice(activeIndex, 1)
+        newOrder.splice(overIndex, 0, movedItem)
         setSortedItems(newOrder)
         await setOverrideConfig({ items: newOrder })
       }
@@ -103,25 +106,31 @@ const Override: React.FC = () => {
     const handleDrop = async (event: DragEvent): Promise<void> => {
       event.preventDefault()
       event.stopPropagation()
-      if (event.dataTransfer?.files) {
-        const file = event.dataTransfer.files[0]
-        if (file.name.endsWith('.js') || file.name.endsWith('.yaml')) {
-          const content = await readTextFile((file as File & { path: string }).path)
-          try {
+      try {
+        if (event.dataTransfer?.files) {
+          const file = event.dataTransfer.files[0]
+          // 拖入选中文字或链接时 files 长度为 0（FileList 本身仍是真值），file 可能为 undefined
+          const name = file?.name.toLowerCase() ?? ''
+          if (name.endsWith('.js') || name.endsWith('.yaml')) {
+            // Electron 32 起已移除 File 上的非标准 path 属性，只能通过 webUtils 拿真实路径
+            const path = window.api.webUtils.getPathForFile(file)
+            const content = await readTextFile(path)
             await addOverrideItemRef.current({
               name: file.name,
               type: 'local',
               file: content,
-              ext: file.name.endsWith('.js') ? 'js' : 'yaml'
+              ext: name.endsWith('.js') ? 'js' : 'yaml'
             })
-          } finally {
-            setFileOver(false)
+          } else if (file) {
+            toast.warning(tRef.current('override.unsupportedFileType'))
           }
-        } else {
-          toast.warning(tRef.current('override.unsupportedFileType'))
         }
+      } catch (e) {
+        toast.error(String(e))
+      } finally {
+        // 无论成功失败都要复位，否则页面会一直卡在 blur-sm 模糊态
+        setFileOver(false)
       }
-      setFileOver(false)
     }
 
     element.addEventListener('dragover', handleDragOver)
