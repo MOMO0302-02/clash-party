@@ -401,9 +401,7 @@ export const getMihomoIpcPath = (): string => {
       : `\\\\.\\pipe\\MihomoParty\\mihomo-user-${sessionId}-${processId}`
   }
 
-  // 注意用 ?? 而非 ||：root 的 uid 是 0，用 || 会被判为假值而退化成 'unknown'，
-  // 导致以 root 运行时的 socket 路径和清理逻辑对不上。
-  const uid = process.getuid?.() ?? 'unknown'
+  const uid = process.getuid?.() || 'unknown'
   const processId = process.pid
   return `/tmp/mihomo-party-${uid}-${processId}.sock`
 }
@@ -649,9 +647,16 @@ function setupCoreListeners(
 
     // TUN 权限错误
     if (str.includes('configure tun interface: operation not permitted')) {
+      // 必须等配置真正落盘、内存缓存换新后再通知 UI，否则界面读回的还是 tun.enable=true 的旧缓存。
+      // 这里不能 await：patchControledMihomoConfig 内部可能触发 restartCore，会把本次启动失败的上报拖住。
       patchControledMihomoConfig({ tun: { enable: false } })
-      mainWindow?.webContents.send('controledMihomoConfigUpdated')
-      ipcMain.emit('updateTrayMenu')
+        .catch((error) => {
+          managerLogger.error('Failed to disable TUN after permission error', error)
+        })
+        .finally(() => {
+          mainWindow?.webContents.send('controledMihomoConfigUpdated')
+          ipcMain.emit('updateTrayMenu')
+        })
       rejectStartup(i18next.t('tun.error.tunPermissionDenied'))
       return
     }
