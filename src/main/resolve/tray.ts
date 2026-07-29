@@ -186,12 +186,18 @@ export const buildContextMenu = async (): Promise<Menu> => {
       type: 'radio',
       checked: mode === 'rule',
       click: async (): Promise<void> => {
-        await patchControledMihomoConfig({ mode: 'rule' })
-        await patchMihomoConfig({ mode: 'rule' })
-        mainWindow?.webContents.send('controledMihomoConfigUpdated')
-        mainWindow?.webContents.send('groupsUpdated')
-        ipcMain.emit('updateTrayMenu')
-        await updateTrayIcon()
+        // 同上：内核未就绪时 patch 会抛错，不捕获即主进程崩溃
+        try {
+          await patchControledMihomoConfig({ mode: 'rule' })
+          await patchMihomoConfig({ mode: 'rule' })
+          mainWindow?.webContents.send('controledMihomoConfigUpdated')
+          mainWindow?.webContents.send('groupsUpdated')
+        } catch (error) {
+          await trayLogger.error('Failed to switch to rule mode from tray', error)
+        } finally {
+          ipcMain.emit('updateTrayMenu')
+          await updateTrayIcon()
+        }
       }
     },
     {
@@ -201,12 +207,17 @@ export const buildContextMenu = async (): Promise<Menu> => {
       type: 'radio',
       checked: mode === 'global',
       click: async (): Promise<void> => {
-        await patchControledMihomoConfig({ mode: 'global' })
-        await patchMihomoConfig({ mode: 'global' })
-        mainWindow?.webContents.send('controledMihomoConfigUpdated')
-        mainWindow?.webContents.send('groupsUpdated')
-        ipcMain.emit('updateTrayMenu')
-        await updateTrayIcon()
+        try {
+          await patchControledMihomoConfig({ mode: 'global' })
+          await patchMihomoConfig({ mode: 'global' })
+          mainWindow?.webContents.send('controledMihomoConfigUpdated')
+          mainWindow?.webContents.send('groupsUpdated')
+        } catch (error) {
+          await trayLogger.error('Failed to switch to global mode from tray', error)
+        } finally {
+          ipcMain.emit('updateTrayMenu')
+          await updateTrayIcon()
+        }
       }
     },
     {
@@ -216,12 +227,17 @@ export const buildContextMenu = async (): Promise<Menu> => {
       type: 'radio',
       checked: mode === 'direct',
       click: async (): Promise<void> => {
-        await patchControledMihomoConfig({ mode: 'direct' })
-        await patchMihomoConfig({ mode: 'direct' })
-        mainWindow?.webContents.send('controledMihomoConfigUpdated')
-        mainWindow?.webContents.send('groupsUpdated')
-        ipcMain.emit('updateTrayMenu')
-        await updateTrayIcon()
+        try {
+          await patchControledMihomoConfig({ mode: 'direct' })
+          await patchMihomoConfig({ mode: 'direct' })
+          mainWindow?.webContents.send('controledMihomoConfigUpdated')
+          mainWindow?.webContents.send('groupsUpdated')
+        } catch (error) {
+          await trayLogger.error('Failed to switch to direct mode from tray', error)
+        } finally {
+          ipcMain.emit('updateTrayMenu')
+          await updateTrayIcon()
+        }
       }
     },
     { type: 'separator' },
@@ -313,10 +329,16 @@ export const buildContextMenu = async (): Promise<Menu> => {
           checked: item.id === current,
           click: async (): Promise<void> => {
             if (item.id === current) return
-            await changeCurrentProfile(item.id)
-            mainWindow?.webContents.send('profileConfigUpdated')
-            ipcMain.emit('updateTrayMenu')
-            await updateTrayIcon()
+            // Electron 不接管 click 返回的 Promise，切换配置失败若不捕获会变成主进程未捕获异常
+            try {
+              await changeCurrentProfile(item.id)
+              mainWindow?.webContents.send('profileConfigUpdated')
+            } catch (error) {
+              await trayLogger.error(`Failed to change profile from tray: ${item.id}`, error)
+            } finally {
+              ipcMain.emit('updateTrayMenu')
+              await updateTrayIcon()
+            }
           }
         }
       })
@@ -377,7 +399,13 @@ export const buildContextMenu = async (): Promise<Menu> => {
       label: t('actions.lightMode.button'),
       type: 'normal',
       accelerator: quitWithoutCoreShortcut,
-      click: quitWithoutCore
+      click: async (): Promise<void> => {
+        try {
+          await quitWithoutCore()
+        } catch (error) {
+          await trayLogger.error('Failed to enter lightweight mode from tray', error)
+        }
+      }
     },
     {
       id: 'restart',
