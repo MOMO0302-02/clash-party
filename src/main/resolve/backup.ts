@@ -19,13 +19,7 @@ import {
   subStoreDir,
   themesDir
 } from '../utils/dirs'
-import {
-  getAppConfig,
-  getControledMihomoConfig,
-  getOverrideConfig,
-  getProfileConfig
-} from '../config'
-import { mainWindow } from '../window'
+import { getAppConfig } from '../config'
 
 let backupCronJob: Cron | null = null
 
@@ -66,9 +60,13 @@ async function getWebDAVClient(): Promise<WebDAVContext> {
     webdavIgnoreCert = false
   } = await getAppConfig()
 
-  const clientOptions: Parameters<typeof createClient>[1] = {
-    username: webdavUsername,
-    password: webdavPassword
+  const clientOptions: Parameters<typeof createClient>[1] = {}
+
+  // webdav 库内部用 base-64 包做 Basic 认证编码，只接受 Latin1 字符，
+  // 中文用户名/密码会直接抛 InvalidCharacterError，所以这里自行用 UTF-8 编码认证头
+  if (webdavUsername || webdavPassword) {
+    const auth = Buffer.from(`${webdavUsername}:${webdavPassword}`, 'utf8').toString('base64')
+    clientOptions.headers = { Authorization: `Basic ${auth}` }
   }
 
   if (webdavIgnoreCert) {
@@ -280,18 +278,6 @@ export async function importLocalBackup(): Promise<boolean> {
     const filePath = result.filePaths[0]
     const zip = new AdmZip(filePath)
     zip.extractAllTo(dataDir(), true)
-    // 主进程对这几份配置有模块级缓存，导入后不强制重读的话，
-    // 之后任何 patch 都会把旧缓存原样写回，刚导入的内容会被静默覆盖掉
-    await Promise.all([
-      getAppConfig(true),
-      getControledMihomoConfig(true),
-      getProfileConfig(true),
-      getOverrideConfig(true)
-    ])
-    // 渲染进程自己发的 appConfigUpdated 等事件没有 ipcMain 监听，只能由主进程推给渲染进程
-    mainWindow?.webContents.send('appConfigUpdated')
-    mainWindow?.webContents.send('controledMihomoConfigUpdated')
-    mainWindow?.webContents.send('profileConfigUpdated')
     await systemLogger.info(`Local backup imported from: ${filePath}`)
     return true
   }
