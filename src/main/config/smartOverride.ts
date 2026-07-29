@@ -184,11 +184,15 @@ function main(config) {
     console.log('[Smart Override] No url-test or load-balance groups found, executing original logic')
     
     // 查找现有的 Smart 代理组并更新
+    // smartGroupName 记录「实际存在且可被规则引用」的组名：命中已有组时是它自己的名字，
+    // 新建时才是 'Smart Group'。规则替换必须用这个名字，否则会指向不存在的组。
     let smartGroupExists = false
+    let smartGroupName = ''
     for (let i = 0; i < config['proxy-groups'].length; i++) {
       const group = config['proxy-groups'][i]
       if (group && group.type === 'smart') {
         smartGroupExists = true
+        smartGroupName = group.name
         console.log('[Smart Override] Found existing smart group:', group.name)
 
         if (!group['policy-priority']) {
@@ -221,6 +225,7 @@ function main(config) {
           proxies: proxyNames
         }
         config['proxy-groups'].unshift(smartGroup)
+        smartGroupName = 'Smart Group'
         console.log('[Smart Override] Created smart group at first position with proxies:', proxyNames)
       } else {
         console.log('[Smart Override] No valid proxies found, skipping smart group creation')
@@ -230,7 +235,11 @@ function main(config) {
     }
 
     // 处理规则替换
-    if (config.rules && Array.isArray(config.rules)) {
+    // 只有在确实存在可引用的 smart 组时才改写规则。否则（订阅只有 proxy-providers、
+    // 没有顶层 proxies，因而没能建组）会把规则目标指向一个不存在的组，内核直接启动失败。
+    if (!smartGroupName) {
+      console.log('[Smart Override] No usable smart group, skipping rule replacement')
+    } else if (config.rules && Array.isArray(config.rules)) {
       console.log('[Smart Override] Processing rules, original count:', config.rules.length)
 
       // 收集所有代理组名称
@@ -296,9 +305,9 @@ function main(config) {
                                     !ruleParams.has(targetValue))
 
               if (shouldReplace) {
-                parts[targetIndex] = 'Smart Group'
+                parts[targetIndex] = smartGroupName
                 replacedCount++
-                console.log('[Smart Override] Replaced rule target:', targetValue, '→ Smart Group')
+                console.log('[Smart Override] Replaced rule target:', targetValue, '→', smartGroupName)
                 return parts.join(',')
               }
             }
@@ -322,16 +331,16 @@ function main(config) {
                                   !ruleParams.has(targetValue))
 
             if (shouldReplace) {
-              rule[targetField] = 'Smart Group'
+              rule[targetField] = smartGroupName
               replacedCount++
-              console.log('[Smart Override] Replaced rule target:', targetValue, '→ Smart Group')
+              console.log('[Smart Override] Replaced rule target:', targetValue, '→', smartGroupName)
             }
           }
         }
         return rule
       })
 
-      console.log('[Smart Override] Rules processed, replaced', replacedCount, 'non-DIRECT rules with Smart Group')
+      console.log('[Smart Override] Rules processed, replaced', replacedCount, 'non-DIRECT rules with', smartGroupName)
     } else {
       console.log('[Smart Override] No rules found or rules is not an array')
     }
