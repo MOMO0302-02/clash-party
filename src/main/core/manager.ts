@@ -662,16 +662,9 @@ function setupCoreListeners(
 
     // TUN 权限错误
     if (str.includes('configure tun interface: operation not permitted')) {
-      // 必须等配置真正落盘、内存缓存换新后再通知 UI，否则界面读回的还是 tun.enable=true 的旧缓存。
-      // 这里不能 await：patchControledMihomoConfig 内部可能触发 restartCore，会把本次启动失败的上报拖住。
       patchControledMihomoConfig({ tun: { enable: false } })
-        .catch((error) => {
-          managerLogger.error('Failed to disable TUN after permission error', error)
-        })
-        .finally(() => {
-          mainWindow?.webContents.send('controledMihomoConfigUpdated')
-          ipcMain.emit('updateTrayMenu')
-        })
+      mainWindow?.webContents.send('controledMihomoConfigUpdated')
+      ipcMain.emit('updateTrayMenu')
       rejectStartup(i18next.t('tun.error.tunPermissionDenied'))
       return
     }
@@ -709,8 +702,25 @@ function setupCoreListeners(
 
     if (isApiReady) {
       try {
-        await startMihomoApiStreams()
-        resolveStartup([completeCoreStartup()])
+        const startupCompletion = startMihomoApiStreams().then(() => completeCoreStartup())
+        resolveStartup([startupCompletion])
+
+        // 内核装载完 provider 后再补发一次：API 端口先于代理组装载就绪，
+        // 上面的刷新可能取到尚未更新的代理组。
+        const notifyProvidersReady = (innerData: Buffer): void => {
+          if (
+            !innerData
+              .toString()
+              .toLowerCase()
+              .includes('start initial compatible provider default')
+          ) {
+            return
+          }
+          proc.stdout?.off('data', notifyProvidersReady)
+          mainWindow?.webContents.send('groupsUpdated')
+          mainWindow?.webContents.send('rulesUpdated')
+        }
+        proc.stdout?.on('data', notifyProvidersReady)
       } catch (error) {
         rejectStartup(error)
       }
