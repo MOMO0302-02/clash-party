@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { IoLink } from 'react-icons/io5'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { platform } from '@renderer/utils/init'
+import { updateTrayIcon } from '@renderer/utils/ipc'
 import { Line } from 'react-chartjs-2'
 import {
   Chart as ChartJS,
@@ -168,9 +169,12 @@ const ConnCard: React.FC<Props> = (props) => {
       window.electron.ipcRenderer.send('trayIconUpdate', png, true)
       hasShowTrafficRef.current = true
     } else if (hasShowTrafficRef.current) {
-      // 关闭：恢复原始图标
+      // 关闭：先让主进程退出流量图标模式（enabled=false 会清掉它的提前 return），
+      // 再请主进程用 resources 里的真实图标重绘一次；只发这条 IPC 的话托盘会一直停在
+      // 渲染进程发过去的这张兜底图上，状态色丢失且必须重启才恢复
       window.electron.ipcRenderer.send('trayIconUpdate', trayIconBase64, false)
       hasShowTrafficRef.current = false
+      updateTrayIcon().catch(() => {})
     }
   }, [showTraffic])
 
