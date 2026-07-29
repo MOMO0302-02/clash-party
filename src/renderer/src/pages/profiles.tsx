@@ -367,9 +367,11 @@ const Profiles: React.FC = () => {
                   >
                     <MdContentPaste className="text-lg" />
                   </Button>
+                  {/* p-0 m-0 覆盖 HeroUI 默认的 `p-2 -m-2`：负外边距会把点击热区外扩 8px，
+                      正好盖住左边只有 mr-2 间距的粘贴按钮，导致点按钮变成切换代理开关 */}
                   <Checkbox
-                    className="whitespace-nowrap"
-                    checked={useProxy}
+                    className="whitespace-nowrap p-0 m-0"
+                    isSelected={useProxy}
                     onValueChange={setUseProxy}
                   >
                     {t('profiles.useProxy')}
