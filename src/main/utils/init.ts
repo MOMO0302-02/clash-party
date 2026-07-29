@@ -360,6 +360,47 @@ async function migrateRemovePassword(): Promise<void> {
   }
 }
 
+// DNSPod 的 IP 形式公共 DNS（120.53.53.53 / 1.12.12.12）已停止服务，
+// 老版本把它们写进了 mihomo.yaml，升级后用户配置里的旧值会一直覆盖新默认值，
+// 表现为 DNS 解析失败却没有任何提示，因此这里做一次性替换。
+const LEGACY_DNS_REPLACEMENTS: Record<string, string> = {
+  'https://120.53.53.53/dns-query': 'https://doh.pub/dns-query',
+  'https://1.12.12.12/dns-query': 'https://doh.pub/dns-query',
+  'tls://120.53.53.53': 'tls://223.5.5.5',
+  'tls://1.12.12.12': 'tls://223.5.5.5'
+}
+
+const LEGACY_DNS_FIELDS = [
+  'nameserver',
+  'proxy-server-nameserver',
+  'default-nameserver',
+  'direct-nameserver',
+  'fallback'
+] as const
+
+function migrateLegacyDnsServers(dns?: IMihomoDNSConfig): IMihomoDNSConfig | null {
+  if (!dns) return null
+
+  const patch: IMihomoDNSConfig = {}
+  for (const field of LEGACY_DNS_FIELDS) {
+    const servers = dns[field]
+    if (!Array.isArray(servers)) continue
+
+    let replaced = false
+    const migrated: string[] = []
+    for (const server of servers) {
+      const replacement = typeof server === 'string' ? LEGACY_DNS_REPLACEMENTS[server.trim()] : ''
+      if (replacement) replaced = true
+      const value = replacement || server
+      // 替换后可能与列表里已有的默认地址重复
+      if (!migrated.includes(value)) migrated.push(value)
+    }
+    if (replaced) patch[field] = migrated
+  }
+
+  return Object.keys(patch).length > 0 ? patch : null
+}
+
 // 迁移：mihomo 配置默认值
 async function migrateMihomoConfig(): Promise<void> {
   const config = await getControledMihomoConfig()
@@ -397,6 +438,13 @@ async function migrateMihomoConfig(): Promise<void> {
   if (config['external-controller-unix']) patches['external-controller-unix'] = undefined
   if (config['external-controller-pipe']) patches['external-controller-pipe'] = undefined
   if (config['external-controller'] === undefined) patches['external-controller'] = ''
+
+  // 已停止服务的 DNS 地址
+  const dnsPatch = migrateLegacyDnsServers(config.dns)
+  if (dnsPatch) {
+    patches.dns = dnsPatch
+    await initLogger.info(`Replaced discontinued DNS servers: ${JSON.stringify(dnsPatch)}`)
+  }
 
   if (Object.keys(patches).length > 0) {
     await patchControledMihomoConfig(patches)
