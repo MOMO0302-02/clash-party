@@ -1,6 +1,6 @@
 import { access, readFile, rm, unlink } from 'fs/promises'
 import { constants, existsSync } from 'fs'
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { isAbsolute, join, relative, resolve } from 'path'
 import { promisify } from 'util'
 import { randomBytes } from 'crypto'
@@ -663,8 +663,13 @@ export async function setFileStr(path: string, content: string): Promise<void> {
   }
 }
 
+const MRS_RULESET_BEHAVIORS = ['domain', 'ipcidr', 'classical'] as const
+
 export async function convertMrsRuleset(filePath: string, behavior: string): Promise<string> {
-  const execAsync = promisify(exec)
+  // behavior 来自订阅下发的 rule-providers，属于不可信输入，只接受内核支持的固定取值
+  if (!(MRS_RULESET_BEHAVIORS as readonly string[]).includes(behavior)) {
+    throw new Error(`Unsupported ruleset behavior: ${behavior}`)
+  }
 
   const { core = 'mihomo' } = await getAppConfig()
   const corePath = mihomoCorePath(core)
@@ -683,7 +688,8 @@ export async function convertMrsRuleset(filePath: string, behavior: string): Pro
   try {
     // 使用 mihomo convert-ruleset 命令转换 MRS 文件为 text 格式
     // 命令格式：mihomo convert-ruleset <behavior> <format> <source>
-    await execAsync(`"${corePath}" convert-ruleset ${behavior} mrs "${fullPath}" "${tempFilePath}"`)
+    // 用 execFile 传参数数组，避免 behavior / 路径经过 shell 解析导致命令注入
+    await execFilePromise(corePath, ['convert-ruleset', behavior, 'mrs', fullPath, tempFilePath])
     const content = await readFile(tempFilePath, 'utf-8')
     await unlink(tempFilePath)
 
