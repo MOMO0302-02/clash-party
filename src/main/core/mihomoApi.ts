@@ -491,13 +491,15 @@ const mihomoTraffic = async (): Promise<void> => {
   mihomoApiLogger.info(`Creating traffic WebSocket with URL: ${wsUrl}, IPC path: ${ipcPath}`)
   trafficStream.ws = ws
 
-  ws.onmessage = async (e): Promise<void> => {
+  ws.onmessage = (e): void => {
     if (!isCurrentStream(trafficStream, generation)) return
 
     const data = e.data as string
-    const json = JSON.parse(data) as IMihomoTrafficInfo
     trafficStream.retry = MAX_RETRY
     try {
+      // JSON.parse 必须放在 try 内：内核发来非 JSON 帧时，旧实现会在 async 回调里
+      // 抛出并变成未捕获的 Promise rejection（其余三条流都已在 try 内解析）。
+      const json = JSON.parse(data) as IMihomoTrafficInfo
       mainWindow?.webContents.send('mihomoTraffic', json)
       if (process.platform !== 'linux') {
         tray?.setToolTip(
@@ -646,7 +648,9 @@ const mihomoConnections = async (): Promise<void> => {
 
 export async function SysProxyStatus(): Promise<boolean> {
   const appConfig = await getAppConfig()
-  return appConfig.sysProxy.enable
+  // 配置缺失/损坏时 sysProxy 可能为 undefined，直接取 .enable 会抛错并连带
+  // 把托盘图标状态刷新整条链路打断（TunStatus 已经是可选链写法）。
+  return appConfig?.sysProxy?.enable === true
 }
 
 export const TunStatus = async (): Promise<boolean> => {
