@@ -2,7 +2,7 @@ import path from 'path'
 import v8 from 'v8'
 import { readFile } from 'fs/promises'
 import { app, ipcMain } from 'electron'
-import i18next from 'i18next'
+import { changeLanguage as changeI18nLanguage } from '../../shared/i18n'
 import {
   mihomoChangeProxy,
   mihomoCloseAllConnections,
@@ -219,7 +219,7 @@ async function measureLatency(url: string): Promise<number | null> {
 }
 
 async function changeLanguage(lng: string): Promise<void> {
-  await i18next.changeLanguage(lng)
+  await changeI18nLanguage(lng)
   ipcMain.emit('updateTrayMenu')
 }
 

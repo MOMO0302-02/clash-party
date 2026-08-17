@@ -40,6 +40,7 @@ import { useTheme } from 'next-themes'
 import { IoIosArrowDown, IoIosHelpCircle, IoMdCloudDownload } from 'react-icons/io'
 import { MdEditDocument } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
+import { changeLanguage } from '../../../../shared/i18n'
 import SettingItem from '../base/base-setting-item'
 import SettingCard from '../base/base-setting-card'
 import BaseConfirmModal from '../base/base-confirm-modal'
@@ -52,7 +53,7 @@ type TrayIconCropTarget = 'custom' | keyof ICustomTrayIcons
 const customTrayIconStateKeys: (keyof ICustomTrayIcons)[] = ['off', 'sysProxy', 'tun']
 
 const GeneralConfig: React.FC = () => {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { data: enable = false, mutate: mutateEnable } = useSWR('checkAutoRun', checkAutoRun)
   const { appConfig, patchAppConfig } = useAppConfig()
   const [customThemes, setCustomThemes] = useState<{ key: string; label: string }[]>()
@@ -233,7 +234,7 @@ const GeneralConfig: React.FC = () => {
             onSelectionChange={async (v) => {
               const newLang = Array.from(v)[0] as 'zh-CN' | 'zh-TW' | 'en-US' | 'ru-RU' | 'fa-IR'
               await patchAppConfig({ language: newLang })
-              i18n.changeLanguage(newLang)
+              await changeLanguage(newLang)
             }}
           >
             <SelectItem key="en-US">English</SelectItem>
