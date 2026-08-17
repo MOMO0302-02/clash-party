@@ -25,6 +25,8 @@ export const supportedLanguages = [...Object.keys(resources), ...Object.keys(laz
 
 const loadedLazyLanguages = new Set<string>()
 
+// Must run after i18next.init(): addResourceBundle is only bound onto the
+// instance once initialisation has created the resource store.
 async function ensureLanguage(lng: string): Promise<void> {
   const loader = lazyLoaders[lng]
   if (!loader || loadedLazyLanguages.has(lng)) return
@@ -43,20 +45,28 @@ export const defaultConfig = {
 }
 
 export const initI18n = async (options: { lng?: string } = {}): Promise<typeof i18next> => {
-  if (options.lng) {
-    await ensureLanguage(options.lng)
-  }
+  const target = options.lng
+  const lazyTarget = target && target in lazyLoaders
+  // Initialise with a bundled language first: addResourceBundle only exists on
+  // the instance after init(), so a lazy language cannot be supplied up front.
   await i18next.init({
     ...defaultConfig,
-    ...options
+    ...options,
+    lng: lazyTarget ? 'en-US' : options.lng || defaultConfig.lng
   })
+  if (lazyTarget && target) {
+    await ensureLanguage(target)
+    await i18next.changeLanguage(target)
+  }
   return i18next
 }
 
 // Load the bundle before switching, so the first render after a language change
 // is already translated rather than falling back to raw keys.
 export const changeLanguage = async (lng: string): Promise<void> => {
-  await ensureLanguage(lng)
+  if (i18next.isInitialized) {
+    await ensureLanguage(lng)
+  }
   await i18next.changeLanguage(lng)
 }
 
