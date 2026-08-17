@@ -456,10 +456,14 @@ const resolveMonitor = async () => {
   console.log(`[INFO]: TrafficMonitor finished`)
 }
 
+// Pinned to a commit instead of the branch tip: this is an executable that gets
+// shipped, and a branch tip can change at any time without review.
+const SEVEN_ZIP_BIN_COMMIT = '234abf56ddc2935de44e07d5e3c40eecab95d5af'
+
 const resolve7zip = () =>
   resolveResource({
     file: '7za.exe',
-    downloadURL: `https://github.com/develar/7zip-bin/raw/master/win/${arch}/7za.exe`
+    downloadURL: `https://github.com/develar/7zip-bin/raw/${SEVEN_ZIP_BIN_COMMIT}/win/${arch}/7za.exe`
   })
 const resolveSubstore = () =>
   resolveResource({
@@ -493,6 +497,10 @@ const resolveSubstoreFrontend = async () => {
 
   console.log(`[INFO]: sub-store-frontend finished`)
 }
+// Pinned to a commit instead of the branch tip, so the bundled font cannot
+// change underneath a build.
+const NOTO_EMOJI_COMMIT = '8998f5dd683424a73e2314a8c1f1e359c19e8742'
+
 const resolveFont = async () => {
   const targetPath = path.join(cwd, 'src', 'renderer', 'src', 'assets', 'NotoColorEmoji.ttf')
 
@@ -500,7 +508,7 @@ const resolveFont = async () => {
     return
   }
   await downloadFile(
-    'https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf',
+    `https://github.com/googlefonts/noto-emoji/raw/${NOTO_EMOJI_COMMIT}/fonts/NotoColorEmoji.ttf`,
     targetPath
   )
 
