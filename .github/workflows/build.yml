@@ -406,6 +406,7 @@ jobs:
             productsign --sign "Developer ID Installer: Prometheus Advertising Corp (489PDK5LP3)" Unsigned-Workbench.pkg $pkg_name
             rm -f Unsigned-Workbench.pkg
             xcrun notarytool submit $pkg_name --apple-id $APPLE_ID --team-id $APPLE_TEAM_ID --password $APPLE_APP_SPECIFIC_PASSWORD --wait
+            xcrun stapler staple $pkg_name
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -508,6 +509,7 @@ jobs:
             productsign --sign "Developer ID Installer: Prometheus Advertising Corp (489PDK5LP3)" Unsigned-Workbench.pkg $pkg_name
             rm -f Unsigned-Workbench.pkg
             xcrun notarytool submit $pkg_name --apple-id $APPLE_ID --team-id $APPLE_TEAM_ID --password $APPLE_APP_SPECIFIC_PASSWORD --wait
+            xcrun stapler staple $pkg_name
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
