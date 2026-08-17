@@ -64,6 +64,7 @@ function clearStreamReconnect(stream: MihomoStreamState): void {
 }
 
 function disposeStreamSocket(ws: WebSocket): void {
+  ws.onopen = null
   ws.onmessage = null
   ws.onclose = null
   ws.onerror = null
@@ -112,6 +113,17 @@ function beginStreamConnection(stream: MihomoStreamState): number | null {
 
 function isCurrentStream(stream: MihomoStreamState, generation: number): boolean {
   return stream.active && stream.generation === generation
+}
+
+// Replenish the retry budget as soon as the socket is established. Waiting for
+// the first message means a stream the core has nothing to say on yet — most
+// visibly /connections while no connection is open — burns its whole budget on
+// idle reconnects and then never comes back for the rest of the session.
+function armStreamSocket(stream: MihomoStreamState, generation: number, ws: WebSocket): void {
+  ws.onopen = (): void => {
+    if (!isCurrentStream(stream, generation)) return
+    stream.retry = MAX_RETRY
+  }
 }
 
 function scheduleStreamReconnect(
@@ -490,6 +502,7 @@ const mihomoTraffic = async (): Promise<void> => {
 
   mihomoApiLogger.info(`Creating traffic WebSocket with URL: ${wsUrl}, IPC path: ${ipcPath}`)
   trafficStream.ws = ws
+  armStreamSocket(trafficStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(trafficStream, generation)) return
@@ -542,6 +555,7 @@ const mihomoMemory = async (): Promise<void> => {
 
   const { ws } = createMihomoWebSocket('/memory')
   memoryStream.ws = ws
+  armStreamSocket(memoryStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(memoryStream, generation)) return
@@ -583,6 +597,7 @@ const mihomoLogs = async (): Promise<void> => {
 
   const { ws } = createMihomoWebSocket(`/logs?level=${logLevel}`)
   logsStream.ws = ws
+  armStreamSocket(logsStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(logsStream, generation)) return
@@ -622,6 +637,7 @@ const mihomoConnections = async (): Promise<void> => {
 
   const { ws } = createMihomoWebSocket('/connections')
   connectionsStream.ws = ws
+  armStreamSocket(connectionsStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(connectionsStream, generation)) return
