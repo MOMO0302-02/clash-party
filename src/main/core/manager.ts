@@ -46,6 +46,7 @@ import {
   getAxios
 } from './mihomoApi'
 import { generateProfile } from './factory'
+import { syncSmartModelToTestDir } from './smartModel'
 import {
   checkAdminRestartForTun as checkAdminRestartForTunWithRestart,
   getSessionAdminStatus,
@@ -945,6 +946,7 @@ export async function checkProfileConfig(
   ageSecretKey?: string
 ): Promise<void> {
   const corePath = mihomoCorePath(core)
+  await syncSmartModelToTestDir()
 
   try {
     await execFilePromise(corePath, ['-t', '-f', configPath, '-d', mihomoTestDir()], {
