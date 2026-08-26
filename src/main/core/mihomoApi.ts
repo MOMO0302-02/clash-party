@@ -2,7 +2,7 @@ import { createConnection } from 'net'
 import axios, { AxiosInstance } from 'axios'
 import WebSocket from 'ws'
 import { app } from 'electron'
-import { getAppConfig, getControledMihomoConfig } from '../config'
+import { getAppConfig, getControledMihomoConfig, manageSmartOverride } from '../config'
 import { mainWindow } from '../window'
 import { tray } from '../resolve/tray'
 import { calcTraffic } from '../utils/calc'
@@ -434,6 +434,9 @@ export const mihomoHotReloadConfig = async (): Promise<void> => {
     await restartCore()
     return
   }
+  // Smart 覆写脚本由应用配置生成，必须先同步再生成配置，
+  // 否则界面上改动的 Smart 选项会沿用旧脚本，要等到下次重启内核才生效
+  await manageSmartOverride()
   const current = await generateProfile()
   const { diffWorkDir = false } = await getAppConfig()
   const configPath = diffWorkDir ? mihomoWorkConfigPath(current) : mihomoWorkConfigPath('work')

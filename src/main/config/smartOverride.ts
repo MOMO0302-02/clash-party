@@ -1,6 +1,6 @@
 import { overrideLogger } from '../utils/logger'
 import { getAppConfig } from './app'
-import { addOverrideItem, removeOverrideItem, getOverrideItem } from './override'
+import { addOverrideItem, removeOverrideItem, getOverrideItem, getOverride } from './override'
 
 const SMART_OVERRIDE_ID = 'smart-core-override'
 
@@ -376,6 +376,13 @@ export async function createSmartOverride(): Promise<void> {
       smartCoreStrategy,
       smartCollectorSize
     )
+
+    // 热重载每次生效前都会重新生成覆写，内容未变时跳过写盘，避免无谓的时间戳刷新
+    const existing = await getOverrideItem(SMART_OVERRIDE_ID)
+    if (existing) {
+      const current = await getOverride(SMART_OVERRIDE_ID, 'js')
+      if (current === template) return
+    }
 
     await addOverrideItem({
       id: SMART_OVERRIDE_ID,
