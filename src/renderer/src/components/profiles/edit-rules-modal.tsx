@@ -563,6 +563,8 @@ const EditRulesModal: React.FC<Props> = (props) => {
   const [prependRules, setPrependRules] = useState<Set<number>>(new Set())
   const [appendRules, setAppendRules] = useState<Set<number>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
+  // 加载失败时不能让用户保存，否则会用空的覆写规则整文件覆盖掉已有配置
+  const [loadFailed, setLoadFailed] = useState(false)
   const { t } = useTranslation()
 
   const ruleIndexMap = useMemo(() => {
@@ -699,6 +701,7 @@ const EditRulesModal: React.FC<Props> = (props) => {
   useEffect(() => {
     const loadContent = async (): Promise<void> => {
       setIsLoading(true)
+      setLoadFailed(false)
       try {
         const content = await getProfileStr(id)
         setProfileContent(content)
@@ -847,8 +850,10 @@ const EditRulesModal: React.FC<Props> = (props) => {
           setAppendRules(new Set())
           setDeletedRules(new Set())
         }
-      } catch {
-        // ignore
+      } catch (e) {
+        // 解析配置文件失败：必须让用户看到并禁止保存，不能静默当成“没有规则”
+        setLoadFailed(true)
+        toast.error(String(e))
       } finally {
         setIsLoading(false)
       }
@@ -878,6 +883,8 @@ const EditRulesModal: React.FC<Props> = (props) => {
   }, [newRule.type, newRule.payload, validateRulePayload])
 
   const handleSave = useCallback(async (): Promise<void> => {
+    // 规则尚未加载完或加载失败时，内存里的规则是空的，保存会把已有覆写清空
+    if (isLoading || loadFailed) return
     try {
       // 保存规则到文件
       const prependRuleStrings = Array.from(prependRules)
@@ -926,7 +933,7 @@ const EditRulesModal: React.FC<Props> = (props) => {
         t('profiles.editRules.saveError') + ': ' + (e instanceof Error ? e.message : String(e))
       )
     }
-  }, [prependRules, deletedRules, rules, appendRules, id, onClose, t])
+  }, [prependRules, deletedRules, rules, appendRules, id, onClose, t, isLoading, loadFailed])
 
   const handleRuleTypeChange = (selected: string): void => {
     const noResolveSupported = isRuleSupportsNoResolve(selected)
@@ -1412,7 +1419,12 @@ const EditRulesModal: React.FC<Props> = (props) => {
           >
             {t('common.cancel')}
           </Button>
-          <Button size="sm" color="primary" onPress={handleSave}>
+          <Button
+            size="sm"
+            color="primary"
+            isDisabled={isLoading || loadFailed}
+            onPress={handleSave}
+          >
             {t('common.save')}
           </Button>
         </ModalFooter>

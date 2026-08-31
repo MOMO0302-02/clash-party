@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { toast } from '@renderer/components/base/toast'
 import { Button, Input, Select, SelectItem, Switch } from '@heroui/react'
 import { listWebdavBackups, webdavBackup, reinitWebdavBackupScheduler } from '@renderer/utils/ipc'
@@ -36,25 +36,33 @@ const WebdavConfig: React.FC = () => {
     webdavBackupCron,
     webdavIgnoreCert
   })
-  const setWebdavDebounce = debounce(
-    ({
-      webdavUrl,
-      webdavUsername,
-      webdavPassword,
-      webdavDir,
-      webdavMaxBackups,
-      webdavBackupCron
-    }) => {
-      patchAppConfig({
-        webdavUrl,
-        webdavUsername,
-        webdavPassword,
-        webdavDir,
-        webdavMaxBackups,
-        webdavBackupCron
-      })
-    },
-    500
+  // patchAppConfig 会随渲染变化，用 ref 取最新值，避免把它写进 useMemo 依赖导致防抖函数被重建
+  const patchAppConfigRef = useRef(patchAppConfig)
+  patchAppConfigRef.current = patchAppConfig
+  // 防抖函数的定时器存在闭包里，必须跨渲染复用同一个实例，否则每次输入都是新闭包、清不掉上一次的定时器，防抖失效
+  const setWebdavDebounce = useMemo(
+    () =>
+      debounce(
+        ({
+          webdavUrl,
+          webdavUsername,
+          webdavPassword,
+          webdavDir,
+          webdavMaxBackups,
+          webdavBackupCron
+        }: typeof webdav) => {
+          patchAppConfigRef.current({
+            webdavUrl,
+            webdavUsername,
+            webdavPassword,
+            webdavDir,
+            webdavMaxBackups,
+            webdavBackupCron
+          })
+        },
+        500
+      ),
+    []
   )
   const handleBackup = async (): Promise<void> => {
     setBackuping(true)

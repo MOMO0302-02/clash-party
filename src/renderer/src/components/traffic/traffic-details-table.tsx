@@ -2,7 +2,7 @@ import { calcTraffic } from '@renderer/utils/calc'
 import type { AggregatedData, DataUsageType } from '@renderer/utils/dataUsage'
 import { Button, Input, Spinner } from '@heroui/react'
 import { IoChevronDown, IoChevronForward, IoSearch } from 'react-icons/io5'
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -46,6 +46,11 @@ const TrafficDetailsTable: React.FC<Props> = ({
       return sortAsc ? cmp : -cmp
     })
   }, [subStats, search, sortField, sortAsc])
+
+  // 父组件复用同一个实例切换行，page 会跨行残留，切行时重置到第一页
+  useEffect(() => {
+    setPage(0)
+  }, [selectedRow])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages - 1)
@@ -238,7 +243,8 @@ const TrafficDetailsTable: React.FC<Props> = ({
             size="sm"
             variant="light"
             isDisabled={safePage === 0}
-            onPress={() => setPage((p) => Math.max(0, p - 1))}
+            // 必须基于夹紧后的 safePage 翻页，否则列表变短后 page 仍停在越界值，连点数次界面都不动
+            onPress={() => setPage(Math.max(0, safePage - 1))}
             className="min-w-0 px-2"
           >
             ‹
@@ -265,7 +271,7 @@ const TrafficDetailsTable: React.FC<Props> = ({
             size="sm"
             variant="light"
             isDisabled={safePage >= totalPages - 1}
-            onPress={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            onPress={() => setPage(Math.min(totalPages - 1, safePage + 1))}
             className="min-w-0 px-2"
           >
             ›

@@ -19,7 +19,8 @@ export function createConfigContext<T>(options: CreateConfigContextOptions<T>) {
   const Context = createContext<ConfigContextValue<T> | undefined>(undefined)
 
   const Provider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { data: config, mutate } = useSWR(swrKey, fetcher)
+    // 用箭头函数包一层，避免 SWR 把 key 字符串当作参数传给 fetcher（会让 force 参数恒为真）
+    const { data: config, mutate } = useSWR(swrKey, () => fetcher())
 
     useEffect(() => {
       const handler = (): void => {
