@@ -547,16 +547,49 @@ export async function closeTrayIcon(): Promise<void> {
   trayMenu = null
 }
 
+// macOS 的 Dock 图标显隐都是异步生效的，而且 Electron 的 Browser::DockHide 会在上一次 DockShow
+// 之后 1 秒内直接 return（规避 TransformProcessType 留下多个 Dock 图标的系统 bug）。
+// 快速点击托盘时 show/hide 交替出现，hide 被静默丢弃，Dock 图标就留在原地不再隐藏（#1867）。
+// 这里把显隐串行化，并在 Electron 的抑制窗口内推迟 hide，同时用期望状态做合并，避免过期操作生效。
+const DOCK_HIDE_SUPPRESSION = 1100
+let dockIconChain: Promise<void> = Promise.resolve()
+let desiredDockVisible: boolean | null = null
+let lastDockShowAt = 0
+
+function setDockIconVisible(visible: boolean): Promise<void> {
+  const dock = app.dock
+  if (process.platform !== 'darwin' || !dock) return Promise.resolve()
+
+  desiredDockVisible = visible
+  dockIconChain = dockIconChain
+    .then(async () => {
+      // 排队期间期望状态被改写，说明这次操作已经过期
+      if (desiredDockVisible !== visible) return
+      if (visible) {
+        if (dock.isVisible()) return
+        lastDockShowAt = Date.now()
+        await dock.show()
+        return
+      }
+      const suppressed = DOCK_HIDE_SUPPRESSION - (Date.now() - lastDockShowAt)
+      if (suppressed > 0) {
+        await new Promise((resolve) => setTimeout(resolve, suppressed))
+        if (desiredDockVisible !== visible) return
+      }
+      // 不能用 isVisible() 提前返回：hide 被抑制时激活策略仍是 regular，必须真的再调一次
+      dock.hide()
+    })
+    .catch(() => {})
+
+  return dockIconChain
+}
+
 export async function showDockIcon(): Promise<void> {
-  if (process.platform === 'darwin' && app.dock && !app.dock.isVisible()) {
-    await app.dock.show()
-  }
+  await setDockIconVisible(true)
 }
 
 export async function hideDockIcon(): Promise<void> {
-  if (process.platform === 'darwin' && app.dock && app.dock.isVisible()) {
-    app.dock.hide()
-  }
+  await setDockIconVisible(false)
 }
 
 const getIconPaths = (): Record<TrayIconStatus, string> => {
