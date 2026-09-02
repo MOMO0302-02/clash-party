@@ -21,6 +21,7 @@ const MAX_RETRY = 10
 const RECONNECT_INTERVAL_MS = 1000
 // 快速重试用完后改成慢速重试，但只要流还是活的就永不放弃
 const SLOW_RECONNECT_INTERVAL_MS = 15000
+const API_TIMEOUT = 15000
 
 interface MihomoStreamState {
   ws: WebSocket | null
@@ -183,7 +184,7 @@ export const getAxios = async (force: boolean = false): Promise<AxiosInstance> =
   axiosIns = axios.create({
     baseURL: `http://localhost`,
     socketPath: dynamicIpcPath,
-    timeout: 15000
+    timeout: API_TIMEOUT
   })
 
   axiosIns.interceptors.response.use(
@@ -392,6 +393,11 @@ export const mihomoUpgradeGeo = async (): Promise<void> => {
   return await instance.post('/configs/geo')
 }
 
+// 内核最多会等 delayTestTimeout 才回包，HTTP 层必须比它更晚超时，否则用户把
+// 「延迟测试超时」调到 API_TIMEOUT 以上时 axios 会先掐断请求，全部节点都报超时。
+const delayRequestTimeout = (testTimeout: number): number =>
+  Math.max(API_TIMEOUT, testTimeout + API_TIMEOUT)
+
 export const mihomoProxyDelay = async (
   proxy: string,
   url?: string,
@@ -399,6 +405,7 @@ export const mihomoProxyDelay = async (
 ): Promise<IMihomoDelay> => {
   const appConfig = await getAppConfig()
   const { delayTestUrl, delayTestTimeout } = appConfig
+  const testTimeout = delayTestTimeout || 5000
   const instance = await getAxios()
   const path = provider
     ? `/providers/proxies/${encodeURIComponent(provider)}/${encodeURIComponent(proxy)}/healthcheck`
@@ -406,20 +413,23 @@ export const mihomoProxyDelay = async (
   return await instance.get(path, {
     params: {
       url: delayTestUrl || url || 'https://www.gstatic.com/generate_204',
-      timeout: delayTestTimeout || 5000
-    }
+      timeout: testTimeout
+    },
+    timeout: delayRequestTimeout(testTimeout)
   })
 }
 
 export const mihomoGroupDelay = async (group: string, url?: string): Promise<IMihomoGroupDelay> => {
   const appConfig = await getAppConfig()
   const { delayTestUrl, delayTestTimeout } = appConfig
+  const testTimeout = delayTestTimeout || 5000
   const instance = await getAxios()
   return await instance.get(`/group/${encodeURIComponent(group)}/delay`, {
     params: {
       url: delayTestUrl || url || 'https://www.gstatic.com/generate_204',
-      timeout: delayTestTimeout || 5000
-    }
+      timeout: testTimeout
+    },
+    timeout: delayRequestTimeout(testTimeout)
   })
 }
 
