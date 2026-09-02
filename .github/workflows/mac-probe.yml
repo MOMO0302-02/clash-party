@@ -16,12 +16,20 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: 下载并安装正式版 pkg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          url=$(curl -s https://api.github.com/repos/mihomo-party-org/clash-party/releases/latest \
-            | grep -o 'https://[^"]*arm64\.pkg' | head -1)
-          echo "::warning title=安装包地址::${url:-未找到}"
-          test -n "$url" || exit 1
+          # 免登录调 api.github.com 在 runner 上会被限流（上一轮就是这样失败的），
+          # 所以带上 Actions 自带的令牌；再留一个写死的地址兜底。
+          url=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/mihomo-party-org/clash-party/releases/latest \
+            | grep -o 'https://[^"]*clash-party-macos-[^"]*arm64\.pkg' | head -1)
+          if [ -z "$url" ]; then
+            url='https://github.com/mihomo-party-org/clash-party/releases/download/v2.0.2/clash-party-macos-2.0.2-arm64.pkg'
+            echo "::warning title=接口未返回地址::改用写死的 v2.0.2 地址"
+          fi
+          echo "::warning title=安装包地址::${url}"
           curl -sL -o /tmp/cp.pkg "$url"
           echo "::warning title=安装包大小::$(stat -f%z /tmp/cp.pkg) 字节"
           sudo installer -pkg /tmp/cp.pkg -target / > /tmp/inst.log 2>&1
