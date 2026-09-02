@@ -244,6 +244,15 @@ export async function grantTunPermissions(): Promise<void> {
   const corePath = mihomoCorePath(core)
   validateCorePath(corePath)
 
+  // 权限已经满足时直接返回，不再提权。
+  // 内核位于应用包内，macOS 会保护已签名应用包的内容，即使以 root 执行 chown 也会返回
+  // Operation not permitted；而安装包的 postinstall 早已设置好 root:admin + setuid。
+  // 此时再执行只会弹一次授权框然后报错，让用户误以为虚拟网卡不可用。
+  if (process.platform !== 'win32' && (await checkMihomoCorePermissions())) {
+    managerLogger.info('Core already has the required permissions, skipping privilege escalation')
+    return
+  }
+
   if (process.platform === 'darwin') {
     const escapedPath = shellEscape(corePath)
     const script = `do shell script "chown root:admin ${escapedPath} && chmod +sx ${escapedPath}" with administrator privileges`
