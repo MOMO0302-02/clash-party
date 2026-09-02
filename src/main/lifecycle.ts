@@ -3,10 +3,12 @@ import { promisify } from 'util'
 import { stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { app, powerMonitor } from 'electron'
+import { getAppConfig } from './config'
 import { stopCoreForExit, cleanupCoreWatcher } from './core/manager'
 import { primeAdminPrivilegesCache } from './core/admin'
 import { triggerSysProxy, disableSysProxySync } from './sys/sysproxy'
 import { exePath } from './utils/dirs'
+import { proxyLogger } from './utils/logger'
 import { saveMainWindowState } from './window'
 
 export function customRelaunch(): void {
@@ -149,6 +151,19 @@ export function setupAppLifecycle(): void {
   powerMonitor.on('shutdown', async () => {
     await cleanupBeforeExit()
     app.exit()
+  })
+
+  // 休眠/待机唤醒后系统代理设置可能已经被系统清掉，而应用这边毫无察觉，
+  // 用户会以为流量还在走代理。唤醒后按当前配置重新下发一次；
+  // triggerSysProxy 内部先关后开，本来就是幂等的，离线时还会自行重试。
+  powerMonitor.on('resume', async () => {
+    try {
+      const { sysProxy } = await getAppConfig()
+      if (!sysProxy?.enable) return
+      await triggerSysProxy(true)
+    } catch (error) {
+      void proxyLogger.error('Failed to restore system proxy after resume', error)
+    }
   })
 
   app.on('will-quit', () => {
