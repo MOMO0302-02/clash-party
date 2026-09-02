@@ -103,6 +103,7 @@ async function createFloatingWindow(): Promise<void> {
       if (!win.isDestroyed()) {
         win.destroy()
       }
+      void restoreTrayIcon()
     })
 
     // 窗口销毁后必须清掉引用，否则 isVisible() 之类的调用会作用在已销毁窗口上抛错；
@@ -148,6 +149,17 @@ async function createFloatingWindow(): Promise<void> {
   }
 }
 
+// 只有在悬浮窗顶上时才允许关掉托盘图标（见 general-config.tsx）。悬浮窗一旦没了，
+// 必须把托盘找回来：否则主窗口一关就再没有任何入口，用户只能去任务管理器杀进程（#2046）。
+async function restoreTrayIcon(): Promise<void> {
+  try {
+    await showTrayIcon()
+    await patchAppConfig({ disableTray: false })
+  } catch (error) {
+    logError('Failed to restore tray icon', error)
+  }
+}
+
 export async function showFloatingWindow(): Promise<void> {
   try {
     if (floatingWindow && !floatingWindow.isDestroyed()) {
@@ -165,6 +177,8 @@ export async function showFloatingWindow(): Promise<void> {
     } else {
       await patchAppConfig({ floatingWindowCompatMode: true })
     }
+    // 这次没建起来，本次会话就没有悬浮窗可用了
+    await restoreTrayIcon()
     throw error
   }
 }
@@ -185,8 +199,7 @@ export async function closeFloatingWindow(): Promise<void> {
     floatingWindow.destroy()
     floatingWindow = null
   }
-  await showTrayIcon()
-  await patchAppConfig({ disableTray: false })
+  await restoreTrayIcon()
 }
 
 export async function showContextMenu(): Promise<void> {
