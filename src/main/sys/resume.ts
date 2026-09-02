@@ -2,7 +2,7 @@ import os from 'os'
 import { net, powerMonitor } from 'electron'
 import { getAppConfig, getControledMihomoConfig } from '../config'
 import { hasCoreProcess, restartCore } from '../core/manager'
-import { mihomoVersion, patchMihomoConfig } from '../core/mihomoApi'
+import { mihomoHotReloadConfig, mihomoVersion, patchMihomoConfig } from '../core/mihomoApi'
 import { getDefaultMihomoTunDevice } from '../../shared/appConfig'
 import { createLogger } from '../utils/logger'
 import { triggerSysProxy } from './sysproxy'
@@ -59,6 +59,13 @@ export async function recoverAfterResume(): Promise<void> {
         resumeLogger.warn(`TUN device ${device} is gone after resume, recreating it`)
         await patchMihomoConfig({ tun: { enable: false } })
         await patchMihomoConfig({ tun: { enable: true } })
+      } else if (tun?.enable) {
+        // 网卡还在、内核也活着，但 TUN 的路由与 DNS 劫持在挂起期间可能已经失效
+        // （用户报告唤醒后代理端口正常、DNS 却不响应）。热重载会让内核重跑
+        // updateDNS / updateTun / updateIPTables，正是用户手动去 DNS 页保存一次
+        // 所触发的那条路径。
+        await mihomoHotReloadConfig()
+        resumeLogger.info('Reloaded core config after resume to restore TUN routing and DNS')
       }
     } else {
       resumeLogger.warn('Core is unreachable after resume, restarting it')
@@ -78,7 +85,6 @@ export async function recoverAfterResume(): Promise<void> {
 }
 
 export function initResumeRecovery(): void {
-  powerMonitor.removeAllListeners('resume')
   powerMonitor.on('resume', () => {
     resumeLogger.info('System resumed, checking core and network state')
     void recoverAfterResume()

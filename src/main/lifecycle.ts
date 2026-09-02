@@ -3,12 +3,7 @@ import { promisify } from 'util'
 import { stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { app, powerMonitor } from 'electron'
-import {
-  stopCoreForExit,
-  cleanupCoreWatcher,
-  handleSystemResume,
-  cancelSystemResumeReload
-} from './core/manager'
+import { stopCoreForExit, cleanupCoreWatcher } from './core/manager'
 import { primeAdminPrivilegesCache } from './core/admin'
 import { triggerSysProxy, disableSysProxySync } from './sys/sysproxy'
 import { exePath } from './utils/dirs'
@@ -107,7 +102,6 @@ export function setupAppLifecycle(): void {
     cleanupPromise = (async () => {
       saveMainWindowState() // 硬退出补一次落盘
 
-      cancelSystemResumeReload()
       cleanupCoreWatcher()
 
       if (process.platform !== 'darwin') {
@@ -157,7 +151,9 @@ export function setupAppLifecycle(): void {
     app.exit()
   })
 
-  powerMonitor.on('resume', handleSystemResume)
+  // 唤醒后的恢复统一由 sys/resume.ts 的 initResumeRecovery() 处理：等网络回来后
+  // 按实际故障分别处置（内核失联则重启、TUN 网卡消失则重建、其余情况热重载配置），
+  // 并重新下发系统代理。此处不再单独注册监听器，否则多个 resume 处理器会互相叠加。
 
   app.on('will-quit', () => {
     if (!sysProxyDisabled) {
