@@ -578,6 +578,20 @@ export async function getProfileStr(id: string | undefined): Promise<string> {
 export async function setProfileStr(id: string, content: string): Promise<void> {
   // 读取最新的配置
   const { current } = await getProfileConfig(true)
+  // 内容没变就不要热重载：内核的 ApplyConfig 会 OnSuspend 整条隧道、重载 DNS 与外部资源、
+  // 最后 ResetConnection，代价是一次真实的断流。订阅定时刷新经常拉回一模一样的文件
+  // （机场用 profile-update-interval 头指定间隔，半小时的很常见），
+  // 那种情况下重载纯属白白断网一次。
+  if (existsSync(profilePath(id))) {
+    try {
+      if ((await readFile(profilePath(id), 'utf-8')) === content) {
+        profileLogger.info(`Profile ${id} unchanged, skipping reload`)
+        return
+      }
+    } catch (error) {
+      profileLogger.warn(`Failed to compare profile ${id} with the stored one`, error)
+    }
+  }
   await atomicWriteFile(profilePath(id), content, { encoding: 'utf8' })
   if (current === id) {
     try {
