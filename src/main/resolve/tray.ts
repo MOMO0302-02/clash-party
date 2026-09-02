@@ -2,7 +2,7 @@ import { execFileSync } from 'child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { extname, join } from 'path'
-import { app, ipcMain, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, ipcMain, Menu, nativeImage, shell, systemPreferences, Tray } from 'electron'
 import { t } from 'i18next'
 import {
   changeCurrentProfile,
@@ -427,7 +427,7 @@ export async function createTray(): Promise<void> {
     }
     // 移除旧监听器防止累积
     ipcMain.removeAllListeners('trayIconUpdate')
-    ipcMain.on('trayIconUpdate', async (_, png: string, enabled: boolean) => {
+    ipcMain.on('trayIconUpdate', async (_, png: string, enabled: boolean, colored = false) => {
       macTrafficIconEnabled = enabled
       const appConfig = await getAppConfig()
       const status = await getTrayIconStatus()
@@ -438,7 +438,8 @@ export async function createTray(): Promise<void> {
         return
       }
       const image = nativeImage.createFromDataURL(png).resize({ height: 16 })
-      image.setTemplateImage(true)
+      // 带状态色的图不能当 template image，否则 macOS 只取 alpha 通道，颜色会被丢掉（#1143）
+      image.setTemplateImage(!colored)
       tray?.setImage(image)
       await updateTrayToolTip(undefined, undefined, false)
     })
@@ -607,6 +608,33 @@ const getIconPaths = (): Record<TrayIconStatus, string> => {
       green: pngIconGreen,
       red: pngIconRed
     }
+  }
+}
+
+// macOS 打开“在状态栏显示网速”后，托盘图标改由渲染进程把图标和文字合成一张图，主进程只负责显示。
+// 合成图此前一律按 template image 处理，macOS 只取 alpha 通道，系统代理/虚拟网卡的状态色全部丢失，
+// 也就是“显示网速时图标颜色无效”（#1143）。这里把该用哪张图、文字用什么颜色告诉渲染进程，
+// 由它连状态色一起画进去；不带状态色时保持原样，继续走 template image。
+export async function getTrayTrafficStyle(): Promise<ITrayTrafficStyle> {
+  const { disableTrayIconColor = false } = await getAppConfig()
+  const status = await getTrayIconStatus()
+  const colored = !disableTrayIconColor && status !== 'white'
+  const source = nativeImage.createFromPath(colored ? getIconPaths()[status] : templateIcon)
+  // 只缩不放：状态图标是 512px，直接丢给渲染进程既浪费又要一次性缩到 36px；模板图标本身只有 64px
+  const icon =
+    source.getSize().height > customTrayIconSize * 8
+      ? source.resize({ height: customTrayIconSize * 8, quality: 'best' })
+      : source
+  // template image 由系统按菜单栏外观自动反色，自己上色时只能跟随系统外观。
+  // 这里读系统级设置而不是 nativeTheme：后者会被应用内的浅色/深色主题覆盖，而菜单栏跟的是系统。
+  const systemDark =
+    process.platform === 'darwin' &&
+    systemPreferences.getUserDefault('AppleInterfaceStyle', 'string') === 'Dark'
+
+  return {
+    icon: icon.isEmpty() ? '' : icon.toDataURL(),
+    colored,
+    textColor: colored && systemDark ? '#ffffff' : '#000000'
   }
 }
 
