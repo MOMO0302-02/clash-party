@@ -171,7 +171,15 @@ jobs:
           cache: 'pnpm'
 
       - name: 安装依赖
-        run: pnpm install
+        run: |
+          pnpm install
+          # 与上游 build.yml 一致：产品名带空格会让 Linux 包格式打不出来
+          sed -i "s/productName: Clash Party/productName: clash-party/" electron-builder.yml
+
+      - name: 安装打包工具
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libarchive-tools
 
       - name: 下载内核
         run: pnpm prepare --x64
@@ -184,6 +192,7 @@ jobs:
           if [ "$code" -ne 0 ]; then
             # 未登录看不到日志，把失败原因塞进 Annotations（匿名可见）
             echo "::warning title=打包失败退出码::${code}"
+            echo "::warning title=打包报错行::$(grep -iE '⨯|error|failed' /tmp/build.log | grep -v 'at ' | tail -6 | tr '\n' '/')"
             echo "::warning title=打包日志尾部::$(tail -c 900 /tmp/build.log | tr '\n' '/')"
             exit "$code"
           fi
@@ -198,6 +207,6 @@ jobs:
           name: clash-party-linux-x64
           path: |
             dist/*.deb
-            dist/*.AppImage
             dist/*.rpm
+            dist/*.pkg.tar.zst
           if-no-files-found: warn
