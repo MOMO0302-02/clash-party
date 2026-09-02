@@ -19,6 +19,8 @@ let currentIpcPath: string = ''
 
 const MAX_RETRY = 10
 const RECONNECT_INTERVAL_MS = 1000
+// 快速重试用完后改成慢速重试，但只要流还是活的就永不放弃
+const SLOW_RECONNECT_INTERVAL_MS = 15000
 
 interface MihomoStreamState {
   ws: WebSocket | null
@@ -119,16 +121,20 @@ function scheduleStreamReconnect(
   generation: number,
   connect: () => Promise<void>
 ): void {
-  if (!isCurrentStream(stream, generation) || stream.retry <= 0) return
+  if (!isCurrentStream(stream, generation)) return
 
-  stream.retry--
+  // 流被显式停止时 active 会置 false（内核停止/重启都会走 stopStream），所以这里只要
+  // 还是活的就继续重连。以前重试 10 次就永久放弃，内核明明还活着，流量/连接/内存/日志
+  // 却再也不会恢复，只能重启内核或整个应用。
+  const interval = stream.retry > 0 ? RECONNECT_INTERVAL_MS : SLOW_RECONNECT_INTERVAL_MS
+  if (stream.retry > 0) stream.retry--
   clearStreamReconnect(stream)
   stream.reconnectTimer = setTimeout(() => {
     stream.reconnectTimer = null
     if (isCurrentStream(stream, generation)) {
       void connect()
     }
-  }, RECONNECT_INTERVAL_MS)
+  }, interval)
 }
 
 function closeErroredStreamSocket(
