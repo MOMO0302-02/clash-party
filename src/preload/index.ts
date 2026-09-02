@@ -130,6 +130,7 @@ const validInvokeChannels = [
   'closeTrayIcon',
   'updateTrayIcon',
   'updateTrayIconImmediate',
+  'getTrayTrafficStyle',
   // Window
   'showMainWindow',
   'closeMainWindow',
