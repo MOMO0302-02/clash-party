@@ -1,0 +1,241 @@
+# 仅供 fork 内部使用：在 GitHub 的 Ubuntu 机器上验证 Linux 行为。
+# 不发布任何 Release，只跑检查、探测能力、产出可下载的安装包。
+# 【重要】这个文件不要出现在提给上游的 PR 里。
+# 触发方式：把要验的分支推成 ci/linux-<名字>。
+name: Linux Verify (fork only)
+
+on:
+  push:
+    branches:
+      - 'ci/linux-**'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: 01 探测 Ubuntu 机器能力
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 系统信息
+        run: |
+          echo "::warning title=系统::$(lsb_release -ds 2>/dev/null || cat /etc/os-release | head -1)"
+          echo "::warning title=内核与架构::$(uname -srm)"
+          echo "::warning title=用户::$(whoami)"
+
+      - name: 免密码提权
+        run: |
+          if sudo -n true 2>/tmp/e; then
+            echo "::warning title=sudo::可用，$(sudo -n id -u)"
+          else
+            echo "::warning title=sudo::不可用 $(cat /tmp/e)"
+            exit 1
+          fi
+
+      - name: 虚拟网卡设备节点
+        run: |
+          if [ -c /dev/net/tun ]; then
+            echo "::warning title=/dev/net/tun::存在 $(ls -l /dev/net/tun)"
+          else
+            sudo modprobe tun 2>/tmp/e || true
+            if [ -c /dev/net/tun ]; then
+              echo "::warning title=/dev/net/tun::modprobe 后出现"
+            else
+              echo "::warning title=/dev/net/tun::缺失 $(cat /tmp/e || echo '')"
+              exit 1
+            fi
+          fi
+
+      - name: 图形环境（xvfb）能否截屏
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb x11-apps imagemagick >/dev/null
+          xvfb-run -a --server-args="-screen 0 1280x800x24" bash -c 'xclock & sleep 3; import -window root /tmp/shot.png'
+          size=$(stat -c%s /tmp/shot.png 2>/dev/null || echo 0)
+          # 空白画面压缩后本来就很小，不能按字节数判定；改为校验它确实是一张 1280x800 的图
+          dim=$(identify -format '%wx%h' /tmp/shot.png 2>/dev/null || echo none)
+          echo "::warning title=截屏结果::${size} 字节，尺寸 ${dim}"
+          test "$dim" = "1280x800"
+
+      - name: 上传截屏
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-桌面截图
+          path: /tmp/shot.png
+          if-no-files-found: ignore
+
+  check:
+    name: 02 Linux 上跑检查与单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 类型检查（主进程）
+        run: pnpm run typecheck:node
+
+      - name: 类型检查（渲染层）
+        run: pnpm run typecheck:web
+
+      - name: 代码规范检查
+        run: pnpm run lint:check
+
+      - name: 格式检查
+        run: pnpm run format:check
+
+      - name: 单元测试
+        run: pnpm test
+
+  tun:
+    name: 03 用真内核起 TUN 虚拟网卡
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 下载内核
+        run: pnpm prepare --x64
+
+      - name: 起内核并打开 TUN
+        run: |
+          set +e
+          core=$(ls extra/sidecar/mihomo* | head -1)
+          chmod +x "$core"
+          work=$(mktemp -d)
+          cat > "$work/config.yaml" <<'CFG'
+          mixed-port: 7890
+          mode: direct
+          log-level: info
+          tun:
+            enable: true
+            stack: system
+            auto-route: false
+            auto-detect-interface: false
+          CFG
+          before=$(ip -o link show | wc -l)
+          echo "::warning title=起内核前::网卡数 ${before}"
+          sudo "$core" -d "$work" > "$work/core.log" 2>&1 &
+          sleep 15
+          after=$(ip -o link show | wc -l)
+          echo "::warning title=起内核后::网卡数 ${after}；列表 $(ip -o link show | awk -F': ' '{print $2}' | tr '\n' ' ')"
+          echo "::warning title=内核日志::$(head -c 700 "$work/core.log" | tr '\n' '/')"
+          sudo pkill -f mihomo
+          test "$after" -gt "$before"
+
+  build:
+    name: 04 打 Linux 安装包
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: |
+          pnpm install
+          # 与上游 build.yml 一致：产品名带空格会让 Linux 包格式打不出来
+          sed -i "s/productName: Clash Party/productName: clash-party/" electron-builder.yml
+
+      - name: 安装打包工具
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libarchive-tools
+
+      - name: 下载内核
+        run: pnpm prepare --x64
+
+      - name: 打包
+        run: |
+          set +e
+          pnpm build:linux --x64 > /tmp/build.log 2>&1
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            # 未登录看不到日志，把失败原因塞进 Annotations（匿名可见）
+            echo "::warning title=打包失败退出码::${code}"
+            echo "::warning title=打包报错行::$(grep -iE '⨯|error|failed' /tmp/build.log | grep -v 'at ' | tail -6 | tr '\n' '/')"
+            echo "::warning title=打包日志尾部::$(tail -c 900 /tmp/build.log | tr '\n' '/')"
+            exit "$code"
+          fi
+          tail -5 /tmp/build.log
+
+      - name: 列出产物
+        run: ls -lh dist
+
+      # 四块探针（glibc 下限 / SNI 托盘 / 无边框窗口白边 / Ubuntu 22.04 容器启动）
+      # 需要 dist/ 里的产物，所以放在打包之后同一个 job 里。
+      - name: 跑 Linux 探针
+        run: |
+          set +e
+          chmod +x ci-probes/run-on-ci.sh
+          PROBES=./ci-probes bash ci-probes/run-on-ci.sh > /tmp/probe.log 2>&1
+          echo "::warning title=探针退出码::$?"
+          emit() {
+            local title="$1" pattern="$2" n="${3:-3}"
+            local v
+            v=$(grep -iE "$pattern" /tmp/probe.log | tail -"$n" | tr '\n' '/')
+            echo "::warning title=${title}::${v:-无匹配}"
+          }
+          emit "glibc下限" '^GLIBC_' 5
+          emit "deb声明的依赖" 'Depends|libc6' 2
+          emit "SNI总线名" 'SNI name' 2
+          emit "SNI接口" 'interface org.kde|node /StatusNotifierItem' 3
+          emit "窗口边缘像素" 'edge pixel' 4
+          emit "容器启动结果" 'exit=|GLIBC_2|error while loading' 4
+
+      - name: 上传探针全量日志
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-探针日志
+          path: /tmp/probe.log
+          if-no-files-found: ignore
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v6
+        with:
+          name: clash-party-linux-x64
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pkg.tar.zst
+          if-no-files-found: warn
