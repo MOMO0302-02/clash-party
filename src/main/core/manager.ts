@@ -7,7 +7,7 @@ import path from 'path'
 import os from 'os'
 import { existsSync, watch, type FSWatcher as NodeFSWatcher } from 'fs'
 import chokidar, { type FSWatcher as ChokidarWatcher } from 'chokidar'
-import { app, ipcMain } from 'electron'
+import { app, dialog, ipcMain } from 'electron'
 import { mainWindow } from '../window'
 import {
   getAppConfig,
@@ -86,6 +86,8 @@ const coreHookTimeout = 30000
 const automaticRestartDelay = 750
 const coreShutdownTimeout = 500
 const resumeReloadDelay = 5000
+// 同一次失败内核可能连打多行，10 秒内只提示一次，避免弹窗刷屏
+const tunFailureReportInterval = 10000
 const coreProcessNames = ['mihomo', 'mihomo-alpha', 'mihomo-smart'] as const
 
 // 核心进程状态
@@ -647,15 +649,46 @@ function setupCoreListeners(
     }
   })
 
+  let lastTunFailureAt = 0
+
   proc.stdout?.on('data', async (data) => {
     const str = data.toString()
 
     // TUN 权限错误
     if (str.includes('configure tun interface: operation not permitted')) {
+      lastTunFailureAt = Date.now()
       patchControledMihomoConfig({ tun: { enable: false } })
       mainWindow?.webContents.send('controledMihomoConfigUpdated')
       ipcMain.emit('updateTrayMenu')
       rejectStartup(i18next.t('tun.error.tunPermissionDenied'))
+      return
+    }
+
+    // 其它虚拟网卡创建失败：内核只打印 "Start TUN listening error" 并在 ReCreateTun 的 defer 里
+    // 把 tun.enable 置回 false，自身继续运行，界面却仍显示虚拟网卡已开启，
+    // 用户只能看到"开了没效果"。把内核原始错误反馈出来，并同步关掉开关。
+    const tunListenErrorLine = str
+      .split('\n')
+      .find((line: string) => line.includes('Start TUN listening error'))
+    if (tunListenErrorLine && Date.now() - lastTunFailureAt > tunFailureReportInterval) {
+      lastTunFailureAt = Date.now()
+      managerLogger.error('TUN listening error detected:', tunListenErrorLine.trim())
+      try {
+        await patchControledMihomoConfig({ tun: { enable: false } })
+      } catch (error) {
+        managerLogger.warn('Failed to disable TUN after listening error', error)
+      }
+      mainWindow?.webContents.send('controledMihomoConfigUpdated')
+      ipcMain.emit('updateTrayMenu')
+      // 不能用 showErrorBox/showMessageBoxSync：模态框会卡住主进程，内核 stdout 写满后会一起卡死
+      dialog
+        .showMessageBox({
+          type: 'error',
+          title: i18next.t('tun.error.tunStartFailed'),
+          message: i18next.t('tun.error.tunStartFailed'),
+          detail: tunListenErrorLine.trim()
+        })
+        .catch(() => {})
       return
     }
 
