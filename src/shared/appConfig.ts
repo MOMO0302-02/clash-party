@@ -8,6 +8,17 @@ export const DEFAULT_NAMESERVER_POLICY: IAppConfig['nameserverPolicy'] = {}
 
 export const DEFAULT_ENABLE_TRAFFIC_LOGGER = true
 
+// dayjs 格式串，用于订阅到期日期的显示
+export const DEFAULT_PROFILE_DATE_FORMAT = 'YYYY-MM-DD'
+
+export const PROFILE_DATE_FORMATS = [
+  'YYYY-MM-DD',
+  'DD.MM.YYYY',
+  'DD/MM/YYYY',
+  'MM/DD/YYYY',
+  'YYYY/MM/DD'
+] as const
+
 export const DEFAULT_USE_SUB_STORE = true
 
 export const DEFAULT_SIDER_ORDER: SiderCardKey[] = [

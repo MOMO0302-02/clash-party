@@ -34,12 +34,14 @@ import {
   writeTheme
 } from '@renderer/utils/ipc'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
+import dayjs from '@renderer/utils/dayjs'
 import debounce from '@renderer/utils/debounce'
 import { platform } from '@renderer/utils/init'
 import { useTheme } from 'next-themes'
 import { IoIosArrowDown, IoIosHelpCircle, IoMdCloudDownload } from 'react-icons/io'
 import { MdEditDocument } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_PROFILE_DATE_FORMAT, PROFILE_DATE_FORMATS } from '../../../../shared/appConfig'
 import SettingItem from '../base/base-setting-item'
 import SettingCard from '../base/base-setting-card'
 import BaseConfirmModal from '../base/base-confirm-modal'
@@ -104,7 +106,8 @@ const GeneralConfig: React.FC = () => {
     language = 'zh-CN',
     triggerMainWindowBehavior = 'show',
     hideConnectionCardWave = false,
-    disableAppLog = false
+    disableAppLog = false,
+    profileDateFormat = DEFAULT_PROFILE_DATE_FORMAT
   } = appConfig || {}
 
   const isCustomGithubProxy =
@@ -292,6 +295,22 @@ const GeneralConfig: React.FC = () => {
               }
             }}
           />
+        </SettingItem>
+        <SettingItem title={t('settings.profileDateFormat')} divider>
+          <Select
+            classNames={{ trigger: 'data-[hover=true]:bg-default-200' }}
+            className="w-50"
+            size="sm"
+            selectedKeys={[profileDateFormat]}
+            aria-label={t('settings.profileDateFormat')}
+            onSelectionChange={(v) => {
+              patchAppConfig({ profileDateFormat: v.currentKey as string })
+            }}
+          >
+            {PROFILE_DATE_FORMATS.map((format) => (
+              <SelectItem key={format}>{dayjs().format(format)}</SelectItem>
+            ))}
+          </Select>
         </SettingItem>
         <SettingItem title={t('settings.autoUpdateProfileOnStart')} divider>
           <Switch

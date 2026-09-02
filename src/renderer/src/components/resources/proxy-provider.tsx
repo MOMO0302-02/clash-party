@@ -14,12 +14,16 @@ import dayjs from '@renderer/utils/dayjs'
 import { calcTraffic } from '@renderer/utils/calc'
 import { getHash } from '@renderer/utils/hash'
 import { useTranslation } from 'react-i18next'
+import { useAppConfig } from '@renderer/hooks/use-app-config'
+import { DEFAULT_PROFILE_DATE_FORMAT } from '../../../../shared/appConfig'
 import SettingItem from '../base/base-setting-item'
 import SettingCard from '../base/base-setting-card'
 import QrCodeModal from '../profiles/qr-code-modal'
 import Viewer from './viewer'
 const ProxyProvider: React.FC = () => {
   const { t } = useTranslation()
+  const { appConfig } = useAppConfig()
+  const { profileDateFormat = DEFAULT_PROFILE_DATE_FORMAT } = appConfig || {}
   const [showDetails, setShowDetails] = useState({
     show: false,
     path: '',
@@ -199,7 +203,7 @@ const ProxyProvider: React.FC = () => {
             >
               <div className="h-[32px] leading-[32px] text-foreground-500">
                 {provider.subscriptionInfo.Expire
-                  ? dayjs.unix(provider.subscriptionInfo.Expire).format('YYYY-MM-DD')
+                  ? dayjs.unix(provider.subscriptionInfo.Expire).format(profileDateFormat)
                   : t('profiles.neverExpire')}
               </div>
             </SettingItem>

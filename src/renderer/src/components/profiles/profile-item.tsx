@@ -21,6 +21,7 @@ import { openFile, updatePluginProfile } from '@renderer/utils/ipc'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { useTranslation } from 'react-i18next'
 import BaseConfirmModal from '../base/base-confirm-modal'
+import { DEFAULT_PROFILE_DATE_FORMAT } from '../../../../shared/appConfig'
 import EditRulesModal from './edit-rules-modal'
 import EditTunnelsModal from './edit-tunnels-modal'
 import EditInfoModal from './edit-info-modal'
@@ -59,7 +60,8 @@ const ProfileItem: React.FC<Props> = (props) => {
   const usage = (extra?.upload ?? 0) + (extra?.download ?? 0)
   const total = extra?.total ?? 0
   const { appConfig, patchAppConfig } = useAppConfig()
-  const { profileDisplayDate = 'expire' } = appConfig || {}
+  const { profileDisplayDate = 'expire', profileDateFormat = DEFAULT_PROFILE_DATE_FORMAT } =
+    appConfig || {}
   const [updating, setUpdating] = useState(false)
   const [openInfoEditor, setOpenInfoEditor] = useState(false)
   const [openFileEditor, setOpenFileEditor] = useState(false)
@@ -361,7 +363,7 @@ const ProfileItem: React.FC<Props> = (props) => {
                     }}
                   >
                     {extra.expire
-                      ? dayjs.unix(extra.expire).format('YYYY-MM-DD')
+                      ? dayjs.unix(extra.expire).format(profileDateFormat)
                       : t('profiles.neverExpire')}
                   </Button>
                 ) : (

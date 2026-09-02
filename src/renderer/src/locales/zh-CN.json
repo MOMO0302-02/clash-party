@@ -78,6 +78,7 @@
   "settings.autoStart": "开机自启",
   "settings.autoStart.permissions": "正在以管理员权限配置计划任务，请在 UAC 对话框中点击'是'...",
   "settings.autoUpdateProfileOnStart": "启动时更新订阅",
+  "settings.profileDateFormat": "日期显示格式",
   "settings.autoCheckUpdate": "自动检查更新",
   "settings.silentUpdate": "静默更新",
   "settings.silentStart": "静默启动",

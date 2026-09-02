@@ -13,6 +13,7 @@ import React, { lazy, Suspense, useState } from 'react'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
 import { TiFolder } from 'react-icons/ti'
 import { useTranslation } from 'react-i18next'
+import { DEFAULT_PROFILE_DATE_FORMAT } from '../../../../shared/appConfig'
 
 const ConfigViewer = lazy(() => import('./config-viewer'))
 
@@ -30,6 +31,7 @@ const ProfileCard: React.FC<Props> = (props) => {
   const {
     profileCardStatus = 'col-span-2',
     profileDisplayDate = 'expire',
+    profileDateFormat = DEFAULT_PROFILE_DATE_FORMAT,
     disableAnimations = false
   } = appConfig || {}
   const location = useLocation()
@@ -168,7 +170,7 @@ const ProfileCard: React.FC<Props> = (props) => {
                     }}
                   >
                     {extra.expire
-                      ? dayjs.unix(extra.expire).format('YYYY-MM-DD')
+                      ? dayjs.unix(extra.expire).format(profileDateFormat)
                       : t('sider.cards.neverExpire')}
                   </Button>
                 ) : (

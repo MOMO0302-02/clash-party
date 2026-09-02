@@ -75,6 +75,7 @@
   "settings.lightMode": "حالت روشن",
   "settings.autoStart": "اجرای خودکار در شروع سیستم",
   "settings.autoUpdateProfileOnStart": "به‌روزرسانی اشتراک‌ها هنگام اجرا",
+  "settings.profileDateFormat": "قالب نمایش تاریخ",
   "settings.autoCheckUpdate": "بررسی خودکار به‌روزرسانی",
   "settings.silentUpdate": "به‌روزرسانی بی‌صدا",
   "settings.silentStart": "اجرای بی‌صدا",
