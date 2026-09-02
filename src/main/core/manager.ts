@@ -809,23 +809,29 @@ async function stopCoreInternal(force = false, cancelStartup = true): Promise<vo
   await cleanupStoppedCoreResources()
 }
 
-function stopCoreProcessAndStreams(cancelStartup = true): void {
+function stopCoreProcessAndStreams(
+  cancelStartup = true,
+  keepWatchdog = false
+): ChildProcess | null {
   if (cancelStartup) {
     cancelActiveStartup?.(new Error('Core startup was cancelled by a stop request'))
     cancelActiveStartup = null
   }
+  const stoppedChild = child
   if (child) {
     child.removeAllListeners()
     child.kill('SIGINT')
     child = null
   }
 
-  stopCoreProcessWatchdog()
+  if (!keepWatchdog) stopCoreProcessWatchdog()
 
   stopMihomoTraffic()
   stopMihomoConnections()
   stopMihomoLogs()
   stopMihomoMemory()
+
+  return stoppedChild
 }
 
 async function cleanupStoppedCoreResources(): Promise<void> {
@@ -846,13 +852,19 @@ export async function stopCore(force = false): Promise<void> {
 }
 
 // 退出不排队等待启动/重启完成：先同步终止子进程，再做有界清理。
+// SIGINT 之后必须确认核心真的退出：core.pid 只在轻量模式写入，普通运行时
+// stopPidFileCore 是空操作，没有任何 SIGKILL 兜底。核心若在退出预算内没走完
+// （例如 TUN 拆除慢），主进程 app.exit() 后它就成了孤儿进程。
+// Linux watchdog 也要留到确认退出之后再撤，否则最后一道兜底先于核心消失。
 export async function stopCoreForExit(): Promise<void> {
   coreOperationPhase = 'shutting-down'
   cancelAutomaticRestart()
-  stopCoreProcessAndStreams()
+  const stoppedChild = stopCoreProcessAndStreams(true, true)
   await Promise.allSettled([
     recoverDNS({ force: true, timeout: 750 }),
-    cleanupStoppedCoreResources()
+    cleanupStoppedCoreResources(),
+    // 确认退出后才撤 watchdog；确认失败时留着它，让它在主进程退出时补 kill -9。
+    ensureCoreProcessExited(stoppedChild).then(() => stopCoreProcessWatchdog(stoppedChild?.pid))
   ])
 }
 
