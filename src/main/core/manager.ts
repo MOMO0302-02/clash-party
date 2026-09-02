@@ -43,7 +43,6 @@ import {
   stopMihomoLogs,
   stopMihomoMemory,
   patchMihomoConfig,
-  mihomoHotReloadConfig,
   getAxios
 } from './mihomoApi'
 import { generateProfile } from './factory'
@@ -85,7 +84,6 @@ const ctlParam = process.platform === 'win32' ? '-ext-ctl-pipe' : '-ext-ctl-unix
 const coreHookTimeout = 30000
 const automaticRestartDelay = 750
 const coreShutdownTimeout = 500
-const resumeReloadDelay = 5000
 // 同一次失败内核可能连打多行，10 秒内只提示一次，避免弹窗刷屏
 const tunFailureReportInterval = 10000
 const coreProcessNames = ['mihomo', 'mihomo-alpha', 'mihomo-smart'] as const
@@ -104,7 +102,6 @@ let coreOperationTail: Promise<void> = Promise.resolve()
 let pendingRestart: Promise<void> | null = null
 let cancelActiveStartup: ((reason: Error) => void) | null = null
 let automaticRestartController: AbortController | null = null
-let resumeReloadTimer: NodeJS.Timeout | null = null
 
 // 文件监听器
 let coreWatcher: ChokidarWatcher | null = null
@@ -979,33 +976,6 @@ export function restartCore(forceStop = false): Promise<void> {
 // 那条路径走的就是 mihomoHotReloadConfig ——内核侧 executor.ApplyConfig 会重跑
 // updateDNS / updateTun / updateIPTables 并 resolver.ResetConnection()，规则随之重建。
 // 这里在 resume 后自动做同一件事，省去用户手动开关。
-async function reloadCoreAfterResume(): Promise<void> {
-  if (!hasCoreProcess()) return
-  const { tun } = await getControledMihomoConfig()
-  if (!tun?.enable) return
-
-  await mihomoHotReloadConfig()
-  managerLogger.info('Reloaded core config after system resume')
-}
-
-export function handleSystemResume(): void {
-  if (resumeReloadTimer) clearTimeout(resumeReloadTimer)
-  // 唤醒瞬间物理网卡通常还没重新连上，auto-detect-interface 会认到错误的出口，
-  // 等一小会儿再重载。
-  resumeReloadTimer = setTimeout(() => {
-    resumeReloadTimer = null
-    reloadCoreAfterResume().catch((error) => {
-      managerLogger.warn('Failed to reload core config after system resume', error)
-    })
-  }, resumeReloadDelay)
-}
-
-export function cancelSystemResumeReload(): void {
-  if (!resumeReloadTimer) return
-  clearTimeout(resumeReloadTimer)
-  resumeReloadTimer = null
-}
-
 // 保持核心运行
 export async function keepCoreAlive(): Promise<boolean> {
   try {

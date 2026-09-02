@@ -425,11 +425,15 @@ async function fetchAndValidateSubscription(options: FetchOptions): Promise<Fetc
 
 export async function createProfile(item: Partial<IProfileItem>): Promise<IProfileItem> {
   const id = item.id || new Date().getTime().toString(16)
+  // 手输的订阅链接常带上首尾空白（中文输入法下还可能是全角空格），
+  // 这类字符不会被 URL 解析器忽略，会让请求直接以 Invalid URL 失败，
+  // 并且原样存进配置，之后每次自动更新都失败。存之前统一去掉。
+  const url = typeof item.url === 'string' ? item.url.trim() : item.url
   const newItem: IProfileItem = {
     id,
     name: item.name || (item.type === 'remote' ? 'Remote File' : 'Local File'),
     type: item.type || 'local',
-    url: item.url,
+    url,
     substore: item.substore || false,
     interval: item.interval || 0,
     override: item.override || [],
@@ -452,9 +456,9 @@ export async function createProfile(item: Partial<IProfileItem>): Promise<IProfi
   }
 
   // Remote
-  if (!item.url) throw new Error('Empty URL')
+  if (!url) throw new Error('Empty URL')
 
-  const profileUrl = item.url
+  const profileUrl = url
   await profileLogger.info(
     `Creating/updating remote profile id=${id} name=${newItem.name} url=${redactSubscriptionUrl(
       profileUrl
