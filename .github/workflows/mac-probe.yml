@@ -1,0 +1,177 @@
+# 仅供 fork 内部使用：第三轮探测——验证三条修复的前提是否成立。
+# 每项一个独立 job，结果用 ::warning:: 输出到 Annotations（匿名可见，绕开日志需登录）。
+# 【重要】这个文件不要出现在提给上游的 PR 里。
+name: macOS 能力探测 (fork only)
+
+on:
+  push:
+    branches:
+      - 'ci/mac-probe'
+  workflow_dispatch:
+
+jobs:
+  corepermission:
+    name: 09 应用包里的内核 chown 与 chmod 分别能不能成功
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: 下载并安装正式版 pkg
+        run: |
+          set +e
+          url=$(curl -s https://api.github.com/repos/mihomo-party-org/clash-party/releases/latest \
+            | grep -o 'https://[^"]*arm64\.pkg' | head -1)
+          echo "::warning title=安装包地址::${url:-未找到}"
+          test -n "$url" || exit 1
+          curl -sL -o /tmp/cp.pkg "$url"
+          echo "::warning title=安装包大小::$(stat -f%z /tmp/cp.pkg) 字节"
+          sudo installer -pkg /tmp/cp.pkg -target / > /tmp/inst.log 2>&1
+          echo "::warning title=安装结果::退出码 $?；$(tail -c 200 /tmp/inst.log | tr '\n' '/')"
+
+      - name: 分别测 chown 与 chmod
+        run: |
+          set +e
+          P="/Applications/Clash Party.app/Contents/Resources/sidecar/mihomo"
+          if [ ! -f "$P" ]; then
+            echo "::warning title=内核文件::不存在，$(ls /Applications | head -5)"
+            exit 1
+          fi
+          echo "::warning title=安装后权限::$(ls -lO "$P" | cut -c1-90)"
+          sudo chmod -s "$P" 2>/tmp/e1; rc1=$?
+          echo "::warning title=清除setuid::rc=${rc1}；$(cat /tmp/e1)"
+          sudo chown root:admin "$P" 2>/tmp/e2; rc2=$?
+          echo "::warning title=chown结果::rc=${rc2}；$(cat /tmp/e2)"
+          sudo chmod +sx "$P" 2>/tmp/e3; rc3=$?
+          echo "::warning title=chmod结果::rc=${rc3}；$(cat /tmp/e3)"
+          echo "::warning title=最终权限::$(ls -lO "$P" | cut -c1-90)"
+          # 修复成立的条件：chmod 能成功（无论 chown 是否失败）
+          test "$rc3" -eq 0
+
+      - name: 普通用户能否写入应用包
+        run: |
+          set +e
+          touch "/Applications/Clash Party.app/Contents/Resources/sidecar/probe" 2>/tmp/e4; rc=$?
+          echo "::warning title=非root写应用包::rc=${rc}；$(cat /tmp/e4)"
+          rm -f "/Applications/Clash Party.app/Contents/Resources/sidecar/probe"
+
+  loginitem:
+    name: 10 开机自启用 Electron 官方接口能不能读写
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 写探针
+        run: |
+          mkdir -p /tmp/probe
+          cat > /tmp/probe/main.js <<'JS'
+          const { app } = require('electron')
+          app.whenReady().then(() => {
+            const snap = (tag) => {
+              const s = app.getLoginItemSettings()
+              console.log(`PROBE ${tag} openAtLogin=${s.openAtLogin} status=${s.status || 'n/a'}`)
+            }
+            snap('初始')
+            app.setLoginItemSettings({ openAtLogin: true })
+            snap('开启后')
+            app.setLoginItemSettings({ openAtLogin: false })
+            snap('关闭后')
+            app.exit(0)
+          })
+          JS
+          cat > /tmp/probe/package.json <<'PJ'
+          { "name": "probe", "main": "main.js" }
+          PJ
+
+      - name: 运行探针
+        run: |
+          set +e
+          ./node_modules/.bin/electron /tmp/probe > /tmp/out.txt 2>&1
+          code=$?
+          echo "::warning title=探针退出码::${code}"
+          grep '^PROBE' /tmp/out.txt | while read -r line; do
+            echo "::warning title=登录项::${line}"
+          done
+          grep -qc 'PROBE 开启后 openAtLogin=true' /tmp/out.txt || {
+            echo "::warning title=失败输出::$(tail -c 500 /tmp/out.txt | tr '\n' '/')"
+            exit 1
+          }
+
+  traytemplate:
+    name: 11 模板图会不会把托盘图标的颜色吃掉
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 写探针
+        run: |
+          mkdir -p /tmp/tray
+          cat > /tmp/tray/main.js <<'JS'
+          const { app, Tray, nativeImage } = require('electron')
+          const B64 =
+            'iVBORw0KGgoAAAANSUhEUgAAABYAAAAWCAYAAADEtGw7AAAASElEQVR4nGNgGFZAv/bbf3yY6gaSZQGphhJlOLmGEjScJgZTaihOw0cNHjWYjgZTw3CshtLUYEoMx2souYYTZSgpFpBs4KAGAN2D1bMGPkSZAAAAAElFTkSuQmCC'
+          app.whenReady().then(() => {
+            const img = nativeImage.createFromDataURL('data:image/png;base64,' + B64)
+            console.log('PROBE 图片尺寸 ' + JSON.stringify(img.getSize()))
+            // 左边这个按上游现状无条件设成模板图，右边保留原色
+            const a = new Tray(img)
+            a.setTemplateImage(true)
+            a.setToolTip('template')
+            const b = new Tray(img)
+            b.setToolTip('colour')
+            console.log('PROBE 两个托盘已创建')
+            setTimeout(() => app.exit(0), 12000)
+          })
+          JS
+          cat > /tmp/tray/package.json <<'PJ'
+          { "name": "tray", "main": "main.js" }
+          PJ
+
+      - name: 起托盘并截菜单栏
+        run: |
+          set +e
+          ./node_modules/.bin/electron /tmp/tray > /tmp/tray.log 2>&1 &
+          sleep 8
+          screencapture -x -R0,0,1920,40 /tmp/menubar.png
+          echo "::warning title=菜单栏截图::$(stat -f%z /tmp/menubar.png 2>/dev/null || echo 0) 字节"
+          grep '^PROBE' /tmp/tray.log | while read -r line; do
+            echo "::warning title=托盘探针::${line}"
+          done
+          # 数一下截图里有多少像素接近那个蓝色（0x2f7df6）
+          out=$(node ci-probes/count-blue.cjs /tmp/menubar.png 2f7df6 60 2>&1)
+          echo "::warning title=蓝色像素统计::${out}"
+          sleep 6
+
+      - name: 上传菜单栏截图
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: 菜单栏截图
+          path: /tmp/menubar.png
+          if-no-files-found: ignore
