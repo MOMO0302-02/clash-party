@@ -11,7 +11,10 @@ import { MdOutlineDataUsage } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 import dayjs from '@renderer/utils/dayjs'
-import { DEFAULT_ENABLE_TRAFFIC_LOGGER } from '../../../../shared/appConfig'
+import {
+  DEFAULT_ENABLE_TRAFFIC_LOGGER,
+  DEFAULT_PROFILE_DATE_FORMAT
+} from '../../../../shared/appConfig'
 
 interface Props {
   iconOnly?: boolean
@@ -24,7 +27,8 @@ const UsageCard: React.FC<Props> = (props) => {
   const {
     usageCardStatus = 'col-span-1',
     disableAnimations = false,
-    enableTrafficLogger = DEFAULT_ENABLE_TRAFFIC_LOGGER
+    enableTrafficLogger = DEFAULT_ENABLE_TRAFFIC_LOGGER,
+    profileDateFormat = DEFAULT_PROFILE_DATE_FORMAT
   } = appConfig || {}
   const location = useLocation()
   const navigate = useNavigate()
@@ -158,7 +162,7 @@ const UsageCard: React.FC<Props> = (props) => {
                         />
                         <div className="text-right text-xs mt-0.5 opacity-70">
                           {Expire
-                            ? (isExpired ? '⚠ ' : '') + dayjs.unix(Expire).format('YYYY-MM-DD')
+                            ? (isExpired ? '⚠ ' : '') + dayjs.unix(Expire).format(profileDateFormat)
                             : t('sider.cards.neverExpire')}
                         </div>
                       </div>

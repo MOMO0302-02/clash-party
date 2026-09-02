@@ -451,6 +451,10 @@ export const mihomoHotReloadConfig = async (): Promise<void> => {
     return
   }
   mihomoApiLogger.info('hot reload config completed')
+  // 热重载会整体换掉内核里的代理组与规则，必须像 restartCore 那样通知渲染层，
+  // 否则代理组/规则页面只能等 SWR 的 30 秒轮询，切换订阅后仍显示上一个订阅的分组。
+  mainWindow?.webContents.send('groupsUpdated')
+  mainWindow?.webContents.send('rulesUpdated')
   try {
     const { scheduleRuntimeConfigUpload } = await import('../resolve/gistApi')
     scheduleRuntimeConfigUpload()

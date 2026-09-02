@@ -435,7 +435,9 @@ export async function createProfile(item: Partial<IProfileItem>): Promise<IProfi
     override: item.override || [],
     useProxy: item.useProxy || false,
     allowFixedInterval: item.allowFixedInterval || false,
-    autoUpdate: item.autoUpdate ?? false,
+    // 远程订阅默认跟随机场下发的 profile-update-interval 自动更新（v1.9.0 之前的行为）。
+    // autoUpdate 开关的用途是让用户关掉它，而不是让所有订阅默认不更新。
+    autoUpdate: item.autoUpdate ?? item.type === 'remote',
     authToken: item.authToken,
     userAgent: item.userAgent,
     ageSecretKey: item.ageSecretKey,
@@ -623,12 +625,11 @@ export async function parseProfileContent(
 ): Promise<IMihomoConfig> {
   const profile = await decryptAgeContent(content, ageSecretKey, `profile "${id || 'default'}"`)
 
-  // 检测是否为 HTML 内容（订阅返回错误页面）
+  // 检测是否为 HTML 内容（订阅返回错误页面）；HTML 标签大小写不敏感，逐个大小写变体列不完
   const trimmed = profile.trim()
   if (
-    trimmed.startsWith('<!DOCTYPE') ||
-    trimmed.startsWith('<html') ||
-    trimmed.startsWith('<HTML') ||
+    /^<!doctype/i.test(trimmed) ||
+    /^<html/i.test(trimmed) ||
     /<style[^>]*>/i.test(trimmed.slice(0, 500))
   ) {
     throw new Error(

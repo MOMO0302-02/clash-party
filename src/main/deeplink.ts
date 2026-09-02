@@ -1,6 +1,6 @@
 import { Notification } from 'electron'
 import i18next from 'i18next'
-import { addProfileItem } from './config'
+import { addProfileItem, getProfileConfig } from './config'
 import { installRemotePlugin, loginPlugin } from './resolve/plugin'
 import { mainWindow } from './window'
 import { safeShowErrorBox } from './utils/init'
@@ -33,6 +33,39 @@ export async function handleDeepLink(url: string): Promise<void> {
         new Notification({ title: i18next.t('profiles.notification.importSuccess') }).show()
       } catch (e) {
         safeShowErrorBox('profiles.error.importFailed', `${url}\n${e}`)
+      }
+      break
+    }
+    // 供系统计划任务使用：clash://update-config 刷新全部远程订阅，
+    // 带 ?id= 或 ?name= 时只刷新指定的一条。应用已在运行时不会弹出主窗口。
+    case 'update-config': {
+      try {
+        const id = urlObj.searchParams.get('id')
+        const name = urlObj.searchParams.get('name')
+        const { items } = await getProfileConfig()
+        const remoteItems = items.filter((item) => item.type === 'remote')
+        const targets =
+          id || name
+            ? remoteItems.filter((item) => (id ? item.id === id : item.name === name))
+            : remoteItems
+        if (targets.length === 0) {
+          throw new Error(i18next.t('profiles.error.noMatchingProfile'))
+        }
+        const failures: string[] = []
+        for (const item of targets) {
+          try {
+            await addProfileItem(item)
+          } catch (e) {
+            failures.push(`${item.name}: ${e}`)
+          }
+        }
+        mainWindow?.webContents.send('profileConfigUpdated')
+        if (failures.length > 0) {
+          throw new Error(failures.join('\n'))
+        }
+        new Notification({ title: i18next.t('profiles.notification.updateSuccess') }).show()
+      } catch (e) {
+        safeShowErrorBox('common.error.updateProfileFailed', `${url}\n${e}`)
       }
       break
     }

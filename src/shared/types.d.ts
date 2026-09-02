@@ -286,6 +286,7 @@ interface IAppConfig {
   proxyDisplayMode: 'simple' | 'full'
   proxyDisplayOrder: 'default' | 'delay' | 'name'
   profileDisplayDate?: 'expire' | 'update'
+  profileDateFormat?: string
   envType?: ('bash' | 'cmd' | 'powershell' | 'fish' | 'nushell')[]
   proxyCols: 'auto' | '1' | '2' | '3' | '4'
   hideUnavailableProxies?: boolean

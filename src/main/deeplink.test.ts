@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { findDeepLink, handleDeepLink } from './deeplink'
 const notificationShow = vi.fn()
 const addProfileItem = vi.fn()
+const getProfileConfig = vi.fn()
 const installRemotePlugin = vi.fn()
 const loginPlugin = vi.fn()
 const safeShowErrorBox = vi.fn()
@@ -15,7 +16,8 @@ vi.mock('electron', () => ({
 }))
 vi.mock('i18next', () => ({ default: { t: (key: string) => key } }))
 vi.mock('./config', () => ({
-  addProfileItem: (...args: unknown[]) => addProfileItem(...args)
+  addProfileItem: (...args: unknown[]) => addProfileItem(...args),
+  getProfileConfig: (...args: unknown[]) => getProfileConfig(...args)
 }))
 vi.mock('./resolve/plugin', () => ({
   installRemotePlugin: (...args: unknown[]) => installRemotePlugin(...args),
@@ -29,6 +31,7 @@ vi.mock('./utils/init', () => ({
 beforeEach(() => {
   notificationShow.mockReset()
   addProfileItem.mockReset().mockResolvedValue(undefined)
+  getProfileConfig.mockReset().mockResolvedValue({ items: [] })
   installRemotePlugin.mockReset().mockResolvedValue({ id: 'plugin-id' })
   loginPlugin.mockReset().mockResolvedValue(undefined)
   safeShowErrorBox.mockReset()
