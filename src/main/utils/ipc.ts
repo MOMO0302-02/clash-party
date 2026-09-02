@@ -104,6 +104,7 @@ import { getInterfaces } from '../sys/interface'
 import {
   closeTrayIcon,
   copyEnv,
+  getTrayTrafficStyle,
   showTrayIcon,
   updateTrayIcon,
   updateTrayIconImmediate
@@ -347,6 +348,7 @@ const asyncHandlers: Record<string, AsyncFn> = {
   showTrayIcon,
   closeTrayIcon,
   updateTrayIcon,
+  getTrayTrafficStyle,
   // Floating Window
   showFloatingWindow,
   closeFloatingWindow,
