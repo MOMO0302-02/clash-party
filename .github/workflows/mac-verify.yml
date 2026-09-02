@@ -1,0 +1,111 @@
+# 仅供 fork 内部使用：在 GitHub 提供的真实 macOS 机器上验证改动。
+# 不做代码签名、不做公证、不发布任何 Release，只产出可下载的安装包。
+# 【重要】这个文件不要出现在提给上游的 PR 里。
+name: macOS Verify (fork only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_x64:
+        description: 是否同时打 Intel(x64) 包，默认只打 Apple 芯片(arm64)
+        type: boolean
+        default: false
+      skip_build:
+        description: 只跑检查与测试，不打安装包
+        type: boolean
+        default: false
+  push:
+    branches:
+      - 'ci/mac-**'
+
+concurrency:
+  group: mac-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: macOS 上跑检查与单元测试
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: 打印运行环境
+        run: |
+          sw_vers
+          echo "arch: $(uname -m)"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 类型检查（主进程）
+        run: pnpm run typecheck:node
+
+      - name: 类型检查（渲染层）
+        run: pnpm run typecheck:web
+
+      - name: 代码规范检查
+        run: pnpm run lint:check
+
+      - name: 格式检查
+        run: pnpm run format:check
+
+      - name: 单元测试
+        run: pnpm test
+
+  build:
+    name: 打 macOS 安装包
+    needs: check
+    if: ${{ !inputs.skip_build }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: ${{ fromJSON(inputs.include_x64 && '["arm64","x64"]' || '["arm64"]') }}
+    runs-on: macos-latest
+    env:
+      npm_config_arch: ${{ matrix.arch }}
+      npm_config_target_arch: ${{ matrix.arch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install
+
+      - name: 下载内核等外部文件
+        run: pnpm prepare --${{ matrix.arch }}
+
+      - name: 打包（不签名、不公证、不发布）
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          chmod +x build/pkg-scripts/postinstall build/pkg-scripts/preinstall
+          pnpm build:mac --${{ matrix.arch }}
+
+      - name: 列出产物
+        run: ls -lh dist
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v6
+        with:
+          name: clash-party-macos-${{ matrix.arch }}
+          path: dist/*.pkg
+          if-no-files-found: error
