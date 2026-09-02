@@ -1012,7 +1012,15 @@ export async function checkProfileConfig(
 
       if (errorLines.length === 0) {
         const allLines = stdout.split('\n').filter((line) => line.trim().length > 0)
-        throw new Error(`${i18next.t('mihomo.error.profileCheckFailed')}:\n${allLines.join('\n')}`)
+        // 内核根本没能启动时（动态链接失败、缺符号、架构不匹配）只有 stderr 有内容，
+        // stdout 为空，此前拼出来的是一句没有任何原因的“配置检查失败”。
+        const detailLines =
+          allLines.length > 0
+            ? allLines
+            : (stderr ?? '').split('\n').filter((line) => line.trim().length > 0)
+        throw new Error(
+          `${i18next.t('mihomo.error.profileCheckFailed')}:\n${detailLines.join('\n')}`
+        )
       } else {
         throw new Error(
           `${i18next.t('mihomo.error.profileCheckFailed')}:\n${errorLines.join('\n')}`
