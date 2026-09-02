@@ -313,6 +313,14 @@ app
       throw error
     }
 
+    // macOS 点击 Dock/启动台图标只会触发 activate。这里必须在首窗创建完成后立刻注册：
+    // 放到启动流程末尾的话，内核启动慢、卡住或弹出模态错误框时监听器一直没装上，
+    // 用户点应用图标毫无反应，表现为“只有小黑点没有界面”（#1459）。
+    // 注册点在 createWindow() 之后，静默启动的首次 activate 已经过去，不会破坏静默启动。
+    app.on('activate', () => {
+      showMainWindow()
+    })
+
     // loadURL/loadFile 成功后才开始兜底计时；加载重试不会提前耗尽首屏预算。
     rendererFirstContentWaiter.startTimeout()
     await rendererFirstContentWaiter.promise
@@ -420,10 +428,6 @@ app
     if (coreStarted) {
       mainWindow?.webContents.send('core-started')
     }
-
-    app.on('activate', () => {
-      showMainWindow()
-    })
   })
   .catch((error) => {
     mainLogger.error('Application startup failed', error)
