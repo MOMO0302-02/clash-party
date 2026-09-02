@@ -89,7 +89,9 @@ export async function triggerSysProxy(
   }
 
   const operation = triggerSysProxyQueue.then(async () => {
-    if (net.isOnline() || options.force) {
+    // 关闭系统代理是纯本地操作，不需要联网。离线时推迟只会把用户继续困在一个
+    // 已经无法工作的代理后面，正是他最想关掉它的时候。
+    if (!enable || net.isOnline() || options.force) {
       if (enable) {
         await disableSysProxy(options.helperTimeout)
         await enableSysProxy(options.helperTimeout, options.forceManual)
