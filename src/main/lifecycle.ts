@@ -3,7 +3,12 @@ import { promisify } from 'util'
 import { stat } from 'fs/promises'
 import { existsSync } from 'fs'
 import { app, powerMonitor } from 'electron'
-import { stopCoreForExit, cleanupCoreWatcher } from './core/manager'
+import {
+  stopCoreForExit,
+  cleanupCoreWatcher,
+  handleSystemResume,
+  cancelSystemResumeReload
+} from './core/manager'
 import { primeAdminPrivilegesCache } from './core/admin'
 import { triggerSysProxy, disableSysProxySync } from './sys/sysproxy'
 import { exePath } from './utils/dirs'
@@ -102,6 +107,7 @@ export function setupAppLifecycle(): void {
     cleanupPromise = (async () => {
       saveMainWindowState() // 硬退出补一次落盘
 
+      cancelSystemResumeReload()
       cleanupCoreWatcher()
 
       if (process.platform !== 'darwin') {
@@ -150,6 +156,8 @@ export function setupAppLifecycle(): void {
     await cleanupBeforeExit()
     app.exit()
   })
+
+  powerMonitor.on('resume', handleSystemResume)
 
   app.on('will-quit', () => {
     if (!sysProxyDisabled) {

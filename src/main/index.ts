@@ -1,4 +1,5 @@
 import { execFile } from 'child_process'
+import { existsSync, readFileSync } from 'fs'
 import { promisify } from 'util'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { app, dialog, ipcMain } from 'electron'
@@ -41,7 +42,8 @@ import {
   setupAppLifecycle,
   getSystemLanguage
 } from './lifecycle'
-import { configureAppPaths } from './utils/dirs'
+import { appConfigPath, configureAppPaths } from './utils/dirs'
+import { parse } from './utils/yaml'
 
 async function getWindowsPowerShellMajorVersion(): Promise<number | null> {
   // 仅 PS 3.0+ 写入 \3\ 键（\1\ 键恒为 2.0，不可用）。
@@ -108,11 +110,15 @@ initApp().catch((e) => {
 
 setupPlatformSpecifics()
 
-async function initHardwareAcceleration(): Promise<void> {
+// app.disableHardwareAcceleration() 只能在 ready 之前调用，之后调用会直接抛错。
+// 旧实现先 await initBasic()（建目录、读写配置、跑迁移），那串磁盘 IO 必然晚于 ready
+// 完成，于是这里恒定抛 "can only be called before app is ready" 并被 catch 吞掉——
+// 「禁用硬件加速」开关从未真正生效（#446）。改为同步读一次 config.yaml。
+function initHardwareAcceleration(): void {
   try {
-    await initBasic()
-    const { disableHardwareAcceleration = false } = await getAppConfig()
-    if (disableHardwareAcceleration) {
+    if (!existsSync(appConfigPath())) return
+    const config = parse<Partial<IAppConfig>>(readFileSync(appConfigPath(), 'utf-8'))
+    if (config?.disableHardwareAcceleration) {
       app.disableHardwareAcceleration()
     }
   } catch (e) {
