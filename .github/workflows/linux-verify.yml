@@ -201,6 +201,35 @@ jobs:
       - name: 列出产物
         run: ls -lh dist
 
+      # 四块探针（glibc 下限 / SNI 托盘 / 无边框窗口白边 / Ubuntu 22.04 容器启动）
+      # 需要 dist/ 里的产物，所以放在打包之后同一个 job 里。
+      - name: 跑 Linux 探针
+        run: |
+          set +e
+          chmod +x ci-probes/run-on-ci.sh
+          PROBES=./ci-probes bash ci-probes/run-on-ci.sh > /tmp/probe.log 2>&1
+          echo "::warning title=探针退出码::$?"
+          emit() {
+            local title="$1" pattern="$2" n="${3:-3}"
+            local v
+            v=$(grep -iE "$pattern" /tmp/probe.log | tail -"$n" | tr '\n' '/')
+            echo "::warning title=${title}::${v:-无匹配}"
+          }
+          emit "glibc下限" '^GLIBC_' 5
+          emit "deb声明的依赖" 'Depends|libc6' 2
+          emit "SNI总线名" 'SNI name' 2
+          emit "SNI接口" 'interface org.kde|node /StatusNotifierItem' 3
+          emit "窗口边缘像素" 'edge pixel' 4
+          emit "容器启动结果" 'exit=|GLIBC_2|error while loading' 4
+
+      - name: 上传探针全量日志
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-探针日志
+          path: /tmp/probe.log
+          if-no-files-found: ignore
+
       - name: 上传安装包
         uses: actions/upload-artifact@v6
         with:
