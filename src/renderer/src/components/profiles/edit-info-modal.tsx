@@ -210,13 +210,13 @@ const EditInfoModal: React.FC<Props> = (props) => {
               <SettingItem title={t('profiles.editInfo.autoUpdate')}>
                 <Switch
                   size="sm"
-                  isSelected={values.autoUpdate ?? false}
+                  isSelected={values.autoUpdate ?? true}
                   onValueChange={(v) => {
                     setValues({ ...values, autoUpdate: v })
                   }}
                 />
               </SettingItem>
-              {values.autoUpdate && (
+              {values.autoUpdate !== false && (
                 <>
                   <SettingItem title={t('profiles.editInfo.interval')}>
                     <div className="flex flex-col gap-2">

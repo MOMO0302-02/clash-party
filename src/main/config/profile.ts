@@ -435,7 +435,9 @@ export async function createProfile(item: Partial<IProfileItem>): Promise<IProfi
     override: item.override || [],
     useProxy: item.useProxy || false,
     allowFixedInterval: item.allowFixedInterval || false,
-    autoUpdate: item.autoUpdate ?? false,
+    // 远程订阅默认跟随机场下发的 profile-update-interval 自动更新（v1.9.0 之前的行为）。
+    // autoUpdate 开关的用途是让用户关掉它，而不是让所有订阅默认不更新。
+    autoUpdate: item.autoUpdate ?? item.type === 'remote',
     authToken: item.authToken,
     userAgent: item.userAgent,
     ageSecretKey: item.ageSecretKey,

@@ -68,8 +68,18 @@ function updateTask(itemId: string, logLabel: string): () => Promise<void> {
   }
 }
 
+// v1.9.0 之前没有 autoUpdate 字段，只要订阅带 interval 就会自动更新。升级后这些订阅的
+// autoUpdate 是 undefined，若按 falsy 处理会让它们静默停止更新，所以只有显式 false 才算关闭。
+function isAutoUpdateEnabled(item: IProfileItem): boolean {
+  return item.autoUpdate !== false
+}
+
 function scheduleProfileUpdate(item: IProfileItem): void {
-  if ((item.type !== 'remote' && item.type !== 'plugin') || !item.autoUpdate || !item.interval)
+  if (
+    (item.type !== 'remote' && item.type !== 'plugin') ||
+    !isAutoUpdateEnabled(item) ||
+    !item.interval
+  )
     return
 
   const itemId = item.id
@@ -119,7 +129,7 @@ export async function initProfileUpdater(): Promise<void> {
   for (const item of items.filter((i) => i.id !== current)) {
     await auditPluginProfileVault(item)
 
-    if (item.type === 'remote' && item.autoUpdate && item.interval) {
+    if (item.type === 'remote' && isAutoUpdateEnabled(item) && item.interval) {
       await addProfileUpdater(item)
 
       if (autoUpdateProfileOnStart) {
@@ -131,14 +141,14 @@ export async function initProfileUpdater(): Promise<void> {
       }
     }
 
-    if (item.type === 'plugin' && item.autoUpdate && item.interval) {
+    if (item.type === 'plugin' && isAutoUpdateEnabled(item) && item.interval) {
       await addProfileUpdater(item)
     }
   }
 
   await auditPluginProfileVault(currentItem)
 
-  if (currentItem?.type === 'remote' && currentItem.autoUpdate && currentItem.interval) {
+  if (currentItem?.type === 'remote' && isAutoUpdateEnabled(currentItem) && currentItem.interval) {
     const currentId = currentItem.id
     await addProfileUpdater(currentItem)
 
@@ -156,7 +166,7 @@ export async function initProfileUpdater(): Promise<void> {
 
   if (
     currentItem?.type === 'plugin' &&
-    currentItem.autoUpdate &&
+    isAutoUpdateEnabled(currentItem) &&
     currentItem.interval &&
     currentItem.id !== 'default'
   ) {
