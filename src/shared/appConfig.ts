@@ -6,7 +6,7 @@ export const DEFAULT_USE_NAMESERVER_POLICY = false
 
 export const DEFAULT_NAMESERVER_POLICY: IAppConfig['nameserverPolicy'] = {}
 
-export const DEFAULT_ENABLE_TRAFFIC_LOGGER = true
+export const DEFAULT_ENABLE_TRAFFIC_LOGGER = false
 
 export const DEFAULT_USE_SUB_STORE = true
 

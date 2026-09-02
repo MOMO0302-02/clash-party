@@ -10,6 +10,8 @@ export interface DataUsageLog {
 }
 
 const DB_NAME = 'clashparty_db'
+// 用量记录的行数上限，超出后从最老的记录开始删
+const MAX_STORED_LOGS = 200_000
 const STORE_NAME = 'data_usage_logs'
 const DB_VERSION = 1
 
@@ -46,12 +48,47 @@ export class DataUsageDB {
   async addLogs(logs: DataUsageLog[]): Promise<void> {
     if (logs.length === 0) return
     const db = await this.open()
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction([STORE_NAME], 'readwrite')
       const store = tx.objectStore(STORE_NAME)
       logs.forEach((log) => store.add(log))
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
+    })
+    await this.enforceRowLimit()
+  }
+
+  // 一行记录对应「一条连接在一个采样周期内的增量」，行数随连接数与运行时长增长，
+  // 只靠 30 天的时间清理挡不住：连接多的机器一天就能写进上百万行，而 IndexedDB
+  // 的缓存活在渲染进程里，于是表现为内存持续上涨。这里按行数封顶，超出就从最老的删。
+  private async enforceRowLimit(): Promise<void> {
+    const db = await this.open()
+    const total = await new Promise<number>((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readonly')
+      const request = tx.objectStore(STORE_NAME).count()
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    if (total <= MAX_STORED_LOGS) return
+
+    let remaining = total - MAX_STORED_LOGS
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readwrite')
+      const store = tx.objectStore(STORE_NAME)
+      const request = store.index('timestamp').openKeyCursor()
+
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest<IDBCursor>).result
+        if (cursor && remaining > 0) {
+          store.delete(cursor.primaryKey)
+          remaining -= 1
+          cursor.continue()
+        } else {
+          resolve()
+        }
+      }
+
+      request.onerror = () => reject(request.error)
     })
   }
 
