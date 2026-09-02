@@ -164,6 +164,12 @@ export async function generateProfile(
   if (!useNameserverPolicy) {
     delete controledMihomoConfig?.dns?.['nameserver-policy']
   }
+  // 空的 TUN 排除地址表示「界面上没有设置」，不能让它覆盖掉配置文件或覆写里已有的
+  // route-exclude-address（与下面清理空 lan-allowed-ips 同理）
+  if (controledMihomoConfig.tun && !controledMihomoConfig.tun['route-exclude-address']?.length) {
+    controledMihomoConfig.tun = { ...controledMihomoConfig.tun }
+    delete controledMihomoConfig.tun['route-exclude-address']
+  }
 
   const profile = deepMerge(currentProfile, controledMihomoConfig)
   // 关闭 DNS 覆写时，如果最终配置没有启用的 DNS 配置，清空 dns-hijack 避免请求被劫持但无法处理
