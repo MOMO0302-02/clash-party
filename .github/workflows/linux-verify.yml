@@ -55,8 +55,10 @@ jobs:
           sudo apt-get install -y -qq xvfb x11-apps imagemagick >/dev/null
           xvfb-run -a --server-args="-screen 0 1280x800x24" bash -c 'xclock & sleep 3; import -window root /tmp/shot.png'
           size=$(stat -c%s /tmp/shot.png 2>/dev/null || echo 0)
-          echo "::warning title=截屏文件大小::${size} 字节"
-          test "$size" -gt 5000
+          # 空白画面压缩后本来就很小，不能按字节数判定；改为校验它确实是一张 1280x800 的图
+          dim=$(identify -format '%wx%h' /tmp/shot.png 2>/dev/null || echo none)
+          echo "::warning title=截屏结果::${size} 字节，尺寸 ${dim}"
+          test "$dim" = "1280x800"
 
       - name: 上传截屏
         if: always()
@@ -175,7 +177,17 @@ jobs:
         run: pnpm prepare --x64
 
       - name: 打包
-        run: pnpm build:linux --x64
+        run: |
+          set +e
+          pnpm build:linux --x64 > /tmp/build.log 2>&1
+          code=$?
+          if [ "$code" -ne 0 ]; then
+            # 未登录看不到日志，把失败原因塞进 Annotations（匿名可见）
+            echo "::warning title=打包失败退出码::${code}"
+            echo "::warning title=打包日志尾部::$(tail -c 900 /tmp/build.log | tr '\n' '/')"
+            exit "$code"
+          fi
+          tail -5 /tmp/build.log
 
       - name: 列出产物
         run: ls -lh dist
