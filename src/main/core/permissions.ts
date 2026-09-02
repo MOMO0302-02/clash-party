@@ -246,8 +246,23 @@ export async function grantTunPermissions(): Promise<void> {
 
   if (process.platform === 'darwin') {
     const escapedPath = shellEscape(corePath)
-    const script = `do shell script "chown root:admin ${escapedPath} && chmod +sx ${escapedPath}" with administrator privileges`
-    await execFilePromise('osascript', ['-e', script])
+    // 内核位于应用包内，macOS 会保护已签名应用包的内容，即使通过 osascript 以 root
+    // 执行，chown 也可能返回 Operation not permitted。但安装包的 postinstall 已经把
+    // 属主设成 root，真正缺的往往只是 setuid 位，此时 chmod 仍然能把权限补齐。
+    // 因此用 `;` 而不是 `&&` 串联：chown 失败时 chmod 依然会执行，最终以内核实际
+    // 是否拿到权限为准，而不是以 chown 的退出码为准。
+    const script = `do shell script "chown root:admin ${escapedPath}; chmod +sx ${escapedPath}" with administrator privileges`
+    try {
+      await execFilePromise('osascript', ['-e', script])
+    } catch (error) {
+      if (!(await checkMihomoCorePermissions())) {
+        throw error
+      }
+      managerLogger.warn(
+        'Core privilege escalation reported an error but the required permissions are already satisfied',
+        error
+      )
+    }
   }
 
   if (process.platform === 'linux') {
