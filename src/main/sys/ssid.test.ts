@@ -17,6 +17,9 @@ vi.mock('child_process', () => ({
     cb(null, { stdout: `    SSID                   : ${mocks.ssid.value}\r\n` })
   }
 }))
+vi.mock('os', () => ({
+  networkInterfaces: () => ({ [mocks.ssid.value]: [] })
+}))
 vi.mock('../config', () => ({
   getAppConfig: mocks.getAppConfig,
   getControledMihomoConfig: mocks.getControledMihomoConfig,
