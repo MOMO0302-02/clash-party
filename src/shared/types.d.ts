@@ -272,6 +272,7 @@ interface ITrayTrafficStyle {
   colored: boolean
   // 文字颜色；template image 由系统自动反色，带色时必须自己跟随系统外观
   textColor: string
+}
 
 type SmartModelVariant = 'standard' | 'middle' | 'large'
 
