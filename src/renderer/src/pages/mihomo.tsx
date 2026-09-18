@@ -659,13 +659,13 @@ const Mihomo: React.FC = () => {
                         await mihomoHotReloadConfig()
                       }}
                     />
-                     <span className="text-default-500">ms</span>
-                   </div>
-                 </SettingItem>
+                    <span className="text-default-500">ms</span>
+                  </div>
+                </SettingItem>
 
-                 <SettingItem
-                   title={
-                     <div className="flex items-center gap-2">
+                <SettingItem
+                  title={
+                    <div className="flex items-center gap-2">
                       <span>{t('mihomo.smartPreferASN')}</span>
                       <Tooltip
                         content={t('mihomo.smartPreferASNTooltip')}
