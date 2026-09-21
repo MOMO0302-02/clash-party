@@ -47,6 +47,7 @@ import {
 } from '@renderer/utils/ipc'
 import React, { useState, useEffect } from 'react'
 import InterfaceModal from '@renderer/components/mihomo/interface-modal'
+import SmartModel from '@renderer/components/mihomo/smart-model'
 import { MdDeleteForever, MdOpenInNew } from 'react-icons/md'
 import { useTranslation } from 'react-i18next'
 import {
@@ -638,6 +639,7 @@ const Mihomo: React.FC = () => {
                       </Tooltip>
                     </div>
                   }
+                  divider
                 >
                   <div className="flex w-[60%]">
                     {lgbmUrlInput !== lgbmUrl && (
@@ -655,6 +657,8 @@ const Mihomo: React.FC = () => {
                     <Input size="sm" value={lgbmUrlInput} onValueChange={setLgbmUrlInput} />
                   </div>
                 </SettingItem>
+
+                <SmartModel />
               </>
             )}
           </div>
