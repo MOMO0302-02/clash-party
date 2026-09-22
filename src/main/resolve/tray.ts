@@ -42,6 +42,7 @@ import {
 } from '../core/manager'
 import { trayLogger } from '../utils/logger'
 import { writeClipboardText } from '../utils/clipboard'
+import { drawModeBadgeBGRA, type TrayBadgeStyle } from '../utils/trayBadge'
 import { floatingWindow, triggerFloatingWindow } from './floatingWindow'
 
 export let tray: Tray | null = null
@@ -431,16 +432,17 @@ export async function createTray(): Promise<void> {
       macTrafficIconEnabled = enabled
       const appConfig = await getAppConfig()
       const status = await getTrayIconStatus()
+      const mode = await getTrayMode()
       const customIcon = createCustomTrayImageForStatus(appConfig, status)
       if (customIcon) {
-        tray?.setImage(customIcon)
+        await setTrayImage(customIcon, mode)
         await updateTrayToolTip(undefined, undefined, true)
         return
       }
       const image = nativeImage.createFromDataURL(png).resize({ height: 16 })
       // 带状态色的图不能当 template image，否则 macOS 只取 alpha 通道，颜色会被丢掉（#1143）
       image.setTemplateImage(!colored)
-      tray?.setImage(image)
+      await setTrayImage(image, mode)
       await updateTrayToolTip(undefined, undefined, false)
     })
     // macOS 默认行为：左键显示窗口，右键显示菜单
@@ -800,17 +802,81 @@ async function updateTrayToolTip(
   tray.setToolTip(['Clash Party', ...status].join('\n'))
 }
 
-function setTrayImage(iconPath: string): void {
-  if (!tray) return
-
-  if (process.platform === 'darwin') {
-    const icon = nativeImage.createFromPath(iconPath).resize({ height: 16 })
-    tray.setImage(icon)
-  } else if (process.platform === 'win32') {
-    tray.setImage(iconPath)
-  } else if (process.platform === 'linux') {
-    tray.setImage(iconPath)
+async function getTrayMode(): Promise<OutboundMode> {
+  try {
+    const { mode } = await getControledMihomoConfig()
+    return mode === 'global' || mode === 'direct' ? mode : 'rule'
+  } catch {
+    return 'rule'
   }
+}
+
+function loadTrayImage(icon: TrayImage): Electron.NativeImage | null {
+  if (typeof icon !== 'string') {
+    return icon.isEmpty() ? null : icon
+  }
+  if (!icon) return null
+  const image = icon.startsWith('data:')
+    ? nativeImage.createFromDataURL(icon)
+    : nativeImage.createFromPath(icon)
+  return image.isEmpty() ? null : image
+}
+
+function applyModeBadgeToImage(
+  image: Electron.NativeImage,
+  mode: OutboundMode
+): Electron.NativeImage {
+  const template = image.isTemplateImage() || image.isMacTemplateImage
+  const style: TrayBadgeStyle = template ? 'template' : 'color'
+  const factors = image.getScaleFactors()
+
+  if (factors.length > 1) {
+    const multiScale = nativeImage.createEmpty()
+    for (const scaleFactor of factors) {
+      const { width, height } = image.getSize(scaleFactor)
+      if (width < 4 || height < 4) continue
+      const bitmap = image.toBitmap({ scaleFactor })
+      drawModeBadgeBGRA(bitmap, width, height, mode, style)
+      multiScale.addRepresentation({ scaleFactor, width, height, buffer: bitmap })
+    }
+    if (!multiScale.isEmpty()) {
+      if (template) multiScale.setTemplateImage(true)
+      return multiScale
+    }
+  }
+
+  const out = nativeImage.createEmpty()
+  for (const scaleFactor of customTrayIconScaleFactors) {
+    const targetHeight = Math.round(customTrayIconSize * scaleFactor)
+    const resized = image.resize({ height: targetHeight, quality: 'best' })
+    if (resized.isEmpty()) continue
+    const { width, height } = resized.getSize()
+    if (width < 4 || height < 4) continue
+    const bitmap = resized.toBitmap()
+    drawModeBadgeBGRA(bitmap, width, height, mode, style)
+    out.addRepresentation({ scaleFactor, width, height, buffer: bitmap })
+  }
+  if (out.isEmpty()) return image
+  if (template) out.setTemplateImage(true)
+  return out
+}
+
+async function setTrayImage(icon: TrayImage, mode?: OutboundMode): Promise<void> {
+  if (!tray) return
+  const badgeMode = mode ?? (await getTrayMode())
+  const source = loadTrayImage(icon)
+  if (!source) {
+    if (typeof icon === 'string' && icon && !icon.startsWith('data:')) {
+      if (process.platform === 'darwin') {
+        const raw = nativeImage.createFromPath(icon)
+        if (!raw.isEmpty()) tray.setImage(raw.resize({ height: 16 }))
+      } else {
+        tray.setImage(icon)
+      }
+    }
+    return
+  }
+  tray.setImage(applyModeBadgeToImage(source, badgeMode))
 }
 
 export function updateTrayIconImmediate(sysProxyEnabled: boolean, tunEnabled: boolean): void {
@@ -819,13 +885,13 @@ export function updateTrayIconImmediate(sysProxyEnabled: boolean, tunEnabled: bo
   const status = calculateTrayIconStatus(sysProxyEnabled, tunEnabled)
   const iconPaths = getIconPaths()
 
-  getAppConfig().then(async (appConfig) => {
+  void Promise.all([getAppConfig(), getTrayMode()]).then(async ([appConfig, mode]) => {
     if (!tray) return
     try {
       const { disableTrayIconColor = false } = appConfig
       const customIcon = createCustomTrayImageForStatus(appConfig, status)
       if (customIcon) {
-        tray.setImage(customIcon)
+        await setTrayImage(customIcon, mode)
         await updateTrayToolTip(sysProxyEnabled, tunEnabled, true)
         return
       }
@@ -835,7 +901,7 @@ export function updateTrayIconImmediate(sysProxyEnabled: boolean, tunEnabled: bo
         return
       }
       const iconPath = disableTrayIconColor ? iconPaths.white : iconPaths[status]
-      setTrayImage(iconPath)
+      await setTrayImage(iconPath, mode)
       await updateTrayToolTip(sysProxyEnabled, tunEnabled, false)
     } catch {
       // Failed to update tray icon
@@ -846,15 +912,18 @@ export function updateTrayIconImmediate(sysProxyEnabled: boolean, tunEnabled: bo
 export async function updateTrayIcon(): Promise<void> {
   if (!tray) return
 
-  const appConfig = await getAppConfig()
+  const [appConfig, status, mode] = await Promise.all([
+    getAppConfig(),
+    getTrayIconStatus(),
+    getTrayMode()
+  ])
   const { disableTrayIconColor = false } = appConfig
-  const status = await getTrayIconStatus()
   const iconPaths = getIconPaths()
 
   try {
     const customIcon = createCustomTrayImageForStatus(appConfig, status)
     if (customIcon) {
-      tray.setImage(customIcon)
+      await setTrayImage(customIcon, mode)
       await updateTrayToolTip(undefined, undefined, true)
       return
     }
@@ -864,7 +933,7 @@ export async function updateTrayIcon(): Promise<void> {
       return
     }
     const iconPath = disableTrayIconColor ? iconPaths.white : iconPaths[status]
-    setTrayImage(iconPath)
+    await setTrayImage(iconPath, mode)
     await updateTrayToolTip(undefined, undefined, false)
   } catch {
     // Failed to update tray icon
