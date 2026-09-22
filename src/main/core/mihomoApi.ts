@@ -420,8 +420,21 @@ export const mihomoGroupDelay = async (group: string, url?: string): Promise<IMi
 }
 
 export const mihomoUpgrade = async (): Promise<void> => {
-  const instance = await getAxios()
-  return await instance.post('/upgrade', undefined, { timeout: 90000 })
+  // 内核未就绪时连接控制管道会 ENOENT（#1413），先确保核心在跑
+  if (!hasCoreProcess() && app.isReady()) {
+    mihomoApiLogger.warn('Core is not running, restarting core before upgrade')
+    await restartCore()
+  }
+  try {
+    const instance = await getAxios()
+    return await instance.post('/upgrade', undefined, { timeout: 90000 })
+  } catch (error) {
+    if (hasCoreProcess() || !app.isReady()) throw error
+    mihomoApiLogger.warn('Core exited before upgrade completed, restarting core', error)
+    await restartCore()
+    const instance = await getAxios(true)
+    return await instance.post('/upgrade', undefined, { timeout: 90000 })
+  }
 }
 
 export const mihomoUpgradeUI = async (): Promise<void> => {
@@ -454,6 +467,9 @@ export const mihomoHotReloadConfig = async (): Promise<void> => {
     return
   }
   mihomoApiLogger.info('hot reload config completed')
+  // 热重载整包替换内核配置后必须通知渲染层刷新，否则界面继续显示旧订阅的代理组（#1169）
+  mainWindow?.webContents.send('groupsUpdated')
+  mainWindow?.webContents.send('rulesUpdated')
   try {
     await syncControlDnsAfterApply(dnsGuard)
   } catch (error) {

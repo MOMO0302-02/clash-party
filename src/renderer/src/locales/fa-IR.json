@@ -638,6 +638,7 @@
   "profiles.editTunnels.loadError": "خطا در بارگذاری تونل‌ها",
   "profiles.editTunnels.saveError": "خطا در ذخیره تونل‌ها",
   "profiles.openFile": "باز کردن فایل",
+  "profiles.reloadLocal": "بارگذاری مجدد از دیسک",
   "profiles.deleteConfirm.title": "تایید حذف اشتراک",
   "profiles.deleteConfirm.content": "اشتراک \"{{name}}\" حذف شود؟ این عمل قابل بازگشت نیست.",
   "profiles.qrCode.title": "کد QR اشتراک",

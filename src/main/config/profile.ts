@@ -14,7 +14,12 @@ import { decryptAgeContent } from '../utils/age'
 import { DEFAULT_MIHOMO_PORTS } from '../../shared/appConfig'
 import { subStorePort } from '../resolve/server'
 import { mihomoCloseAllConnections, mihomoHotReloadConfig } from '../core/mihomoApi'
-import { checkProfileConfig, restartCore, type CheckProfileOptions } from '../core/manager'
+import {
+  checkProfileConfig,
+  hasCoreProcess,
+  restartCore,
+  type CheckProfileOptions
+} from '../core/manager'
 import { generateProfile, globalOverrideIdsNow } from '../core/factory'
 import { addProfileUpdater, removeProfileUpdater } from '../core/profileUpdater'
 import {
@@ -181,6 +186,12 @@ export async function changeCurrentProfile(id: string): Promise<void> {
           return config
         })
         taskError = e
+        // 切换失败（尤其 TUN 下）可能连带内核已退出，回滚后补一次重启（#1741）
+        try {
+          if (!hasCoreProcess()) await restartCore()
+        } catch (restartError) {
+          profileLogger.warn('Failed to restart core after profile switch rollback', restartError)
+        }
       }
     })
   await changeProfileQueue

@@ -300,9 +300,9 @@ function setupWindowEvents(window: BrowserWindow): void {
   })
 
   window.on('close', async (event) => {
-    saveWindowState(window) // 关窗前兜底（#1954）
-
+    // 先阻止默认关闭，避免同步写状态期间系统已按“关闭中”合成掉圆角的一帧（#624）
     event.preventDefault()
+    saveWindowState(window) // 关窗前兜底（#1954）
     window.hide()
 
     const {

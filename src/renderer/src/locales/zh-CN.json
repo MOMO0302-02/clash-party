@@ -656,6 +656,7 @@
   "profiles.editTunnels.loadError": "加载隧道时出错",
   "profiles.editTunnels.saveError": "保存隧道时出错",
   "profiles.openFile": "打开文件",
+  "profiles.reloadLocal": "从磁盘重新加载",
   "profiles.deleteConfirm.title": "确认删除订阅",
   "profiles.deleteConfirm.content": "确定要删除订阅“{{name}}”吗？此操作无法撤销。",
   "profiles.qrCode.title": "订阅二维码",

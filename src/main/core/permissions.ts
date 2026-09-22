@@ -15,7 +15,7 @@ const execPromise = promisify(exec)
 const execFilePromise = promisify(execFile)
 
 // 内核名称白名单
-const ALLOWED_CORES = ['mihomo', 'mihomo-alpha', 'mihomo-smart'] as const
+const ALLOWED_CORES = ['mihomo', 'mihomo-alpha', 'mihomo-smart', 'mihomo-specific'] as const
 type AllowedCore = (typeof ALLOWED_CORES)[number]
 type StopCoreBeforeAdminRestart = (force?: boolean) => Promise<void>
 

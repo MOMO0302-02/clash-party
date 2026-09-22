@@ -651,6 +651,7 @@
   "profiles.editTunnels.loadError": "Error loading tunnels",
   "profiles.editTunnels.saveError": "Error saving tunnels",
   "profiles.openFile": "Open File",
+  "profiles.reloadLocal": "Reload from disk",
   "profiles.deleteConfirm.title": "Confirm Subscription Deletion",
   "profiles.deleteConfirm.content": "Delete subscription \"{{name}}\"? This action cannot be undone.",
   "profiles.qrCode.title": "Subscription QR Code",

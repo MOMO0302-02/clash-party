@@ -641,6 +641,7 @@
   "profiles.editTunnels.loadError": "Ошибка загрузки туннелей",
   "profiles.editTunnels.saveError": "Ошибка сохранения туннелей",
   "profiles.openFile": "Открыть файл",
+  "profiles.reloadLocal": "Перезагрузить с диска",
   "profiles.deleteConfirm.title": "Подтвердить удаление подписки",
   "profiles.deleteConfirm.content": "Удалить подписку \"{{name}}\"? Это действие нельзя отменить.",
   "profiles.qrCode.title": "QR-код подписки",
