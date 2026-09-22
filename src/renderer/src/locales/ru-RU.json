@@ -486,6 +486,8 @@
   "sysproxy.bypass.invalid.unix": "Введите корректное имя хоста, IP-адрес, CIDR-сеть или шаблон, например 192.168.0.0/16",
   "sysproxy.bypass.notSaved": "Некорректные исключения не будут сохранены; исправьте или удалите их.",
   "tun.title": "TUN",
+  "tun.controlTun": "Управление настройками TUN",
+  "tun.saveOnly": "Только сохранить",
   "tun.firewall.title": "Сбросить брандмауэр",
   "tun.firewall.reset": "Сбросить брандмауэр",
   "tun.core.title": "Ручная авторизация",

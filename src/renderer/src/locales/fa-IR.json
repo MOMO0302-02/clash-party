@@ -484,6 +484,8 @@
   "sysproxy.bypass.invalid.unix": "یک میزبان، نشانی IP، شبکه CIDR یا الگوی معتبر وارد کنید، مانند 192.168.0.0/16",
   "sysproxy.bypass.notSaved": "موارد نامعتبر دور زدن ذخیره نمی‌شوند؛ ابتدا آن‌ها را اصلاح یا حذف کنید.",
   "tun.title": "TUN",
+  "tun.controlTun": "کنترل تنظیمات TUN",
+  "tun.saveOnly": "فقط ذخیره",
   "tun.firewall.title": "بازنشانی دیوار آتش",
   "tun.firewall.reset": "بازنشانی دیوار آتش",
   "tun.core.title": "مجوزدهی دستی",

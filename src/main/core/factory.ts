@@ -24,7 +24,11 @@ import { parse, stringify } from '../utils/yaml'
 import { deepMerge } from '../utils/merge'
 import { createLogger } from '../utils/logger'
 import { decryptAgeContent } from '../utils/age'
-import { DEFAULT_CONTROL_DNS, DEFAULT_CONTROL_SNIFF } from '../../shared/appConfig'
+import {
+  DEFAULT_CONTROL_DNS,
+  DEFAULT_CONTROL_SNIFF,
+  DEFAULT_CONTROL_TUN
+} from '../../shared/appConfig'
 import { atomicWriteFile } from '../utils/safeFile'
 import { compileSimpleRuntime } from '../simple/service'
 import { evaluateDnsOverrideGuard, type DnsOverrideGuardResult } from './dnsOverrideGuard'
@@ -169,6 +173,7 @@ export async function generateProfile(
     diffWorkDir = false,
     controlDns: controlDnsSetting = DEFAULT_CONTROL_DNS,
     controlSniff = DEFAULT_CONTROL_SNIFF,
+    controlTun = DEFAULT_CONTROL_TUN,
     useNameserverPolicy
   } = appConfig
   // DNS 保护先于覆写和脚本处理，开关在内核应用成功后同步。
@@ -199,6 +204,11 @@ export async function generateProfile(
   }
   if (!controlSniff) {
     delete controledMihomoConfig.sniffer
+  }
+  // 不接管 TUN 时只保留总开关 enable（侧栏/托盘仍可控），其余字段用订阅原始 tun（#1633）
+  if (!controlTun && controledMihomoConfig.tun) {
+    const { enable } = controledMihomoConfig.tun
+    controledMihomoConfig.tun = enable === undefined ? {} : { enable }
   }
   if (!useNameserverPolicy) {
     delete controledMihomoConfig?.dns?.['nameserver-policy']

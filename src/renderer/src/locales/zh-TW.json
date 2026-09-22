@@ -495,6 +495,8 @@
   "sysproxy.bypass.invalid.unix": "請輸入有效的主機、IP 位址、CIDR 網段或萬用字元，例如 192.168.0.0/16",
   "sysproxy.bypass.notSaved": "無效的代理繞過項不會被儲存，請先修正或刪除。",
   "tun.title": "虛擬網卡",
+  "tun.controlTun": "接管 TUN 設定",
+  "tun.saveOnly": "僅保存",
   "tun.firewall.title": "重設防火牆",
   "tun.firewall.reset": "重設防火牆",
   "tun.core.title": "手動授權內核",

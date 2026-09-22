@@ -388,6 +388,7 @@ interface IAppConfig {
   encryptedPassword?: number[]
   controlDns?: boolean
   controlSniff?: boolean
+  controlTun?: boolean
   useDockIcon?: boolean
   showTraffic?: boolean
   disableTrayIconColor?: boolean
