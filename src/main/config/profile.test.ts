@@ -276,6 +276,48 @@ describe('last update status (#1606)', () => {
   })
 })
 
+describe('legacy numeric profile IDs (#2141 residual)', () => {
+  it('coerces non-finite and numeric ids to strings before JSON clone', async () => {
+    writeFileSync(
+      join(testDir, 'profile.yaml'),
+      'current: 19999999999\nitems:\n  - id: 19999999999\n    type: local\n    name: Num\n  - id: .inf\n    type: local\n    name: Inf\n'
+    )
+    await getProfileConfig(true)
+
+    const config = await getProfileConfig()
+    expect(config.items.map((i) => i.id)).toEqual(['19999999999', 'Infinity'])
+    expect(config.current).toBe('19999999999')
+    expect(config.items.every((i) => typeof i.id === 'string')).toBe(true)
+  })
+
+  it('deduplicates duplicate ids and keeps current consistent', async () => {
+    writeFileSync(
+      join(testDir, 'profile.yaml'),
+      'current: dup\nitems:\n  - id: dup\n    type: local\n    name: A\n  - id: dup\n    type: local\n    name: B\n'
+    )
+    await getProfileConfig(true)
+
+    const config = await getProfileConfig()
+    const ids = config.items.map((i) => i.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(config.items.find((i) => i.name === 'A')?.id).toBe('dup')
+    expect(config.items.find((i) => i.name === 'B')?.id).toBe('dup-2')
+    expect(config.current).toBe('dup')
+  })
+
+  it('replaces null ids with a generated string id', async () => {
+    writeFileSync(
+      join(testDir, 'profile.yaml'),
+      'items:\n  - id: null\n    type: local\n    name: NullId\n'
+    )
+    await getProfileConfig(true)
+
+    const config = await getProfileConfig()
+    expect(config.items[0]?.id).toBeTruthy()
+    expect(typeof config.items[0]?.id).toBe('string')
+  })
+})
+
 describe('profile deletion (R2-ISS-034 / R2-ISS-067)', () => {
   it('a failed core restart deletes nothing: the record stays for a retry, and the retry completes the deletion', async () => {
     const workDir = join(testDir, 'work', 'remote')

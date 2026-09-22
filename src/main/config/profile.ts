@@ -36,6 +36,7 @@ import type { SimpleSubscriptionOptions } from '../../shared/simple-config'
 import { getAppConfig } from './app'
 import { getControledMihomoConfig } from './controledMihomo'
 import { getPluginItem, pluginSchedule } from './plugin'
+import { normalizeConfigIds } from './normalizeIds'
 import { runtimeConfigWriteQueue } from './runtimeConfigQueue'
 
 const profileLogger = createLogger('Profile')
@@ -111,12 +112,12 @@ export async function getProfileConfig(force = false): Promise<IProfileConfig> {
   }
   if (typeof profileConfig !== 'object') profileConfig = { items: [] }
   if (!Array.isArray(profileConfig.items)) profileConfig.items = []
-  return JSON.parse(JSON.stringify(profileConfig))
+  return JSON.parse(JSON.stringify(normalizeConfigIds(profileConfig))) as IProfileConfig
 }
 
 export async function setProfileConfig(config: IProfileConfig): Promise<void> {
   await profileConfigWriteQueue.run(async () => {
-    const nextConfig = JSON.parse(JSON.stringify(config)) as IProfileConfig
+    const nextConfig = JSON.parse(JSON.stringify(normalizeConfigIds(config))) as IProfileConfig
     await atomicWriteFile(profileConfigPath(), stringify(nextConfig), { encoding: 'utf8' })
     profileConfig = nextConfig
     profileConfigVersion++
@@ -136,11 +137,13 @@ export async function updateProfileConfig(
       throw new Error('Profile config is invalid')
     }
     if (!Array.isArray(currentConfig.items)) currentConfig.items = []
-    const nextConfig = await updater(JSON.parse(JSON.stringify(currentConfig)))
+    const nextConfig = await updater(
+      JSON.parse(JSON.stringify(normalizeConfigIds(currentConfig))) as IProfileConfig
+    )
     await atomicWriteFile(profileConfigPath(), stringify(nextConfig), { encoding: 'utf8' })
     profileConfig = nextConfig
     profileConfigVersion++
-    return JSON.parse(JSON.stringify(nextConfig)) as IProfileConfig
+    return JSON.parse(JSON.stringify(normalizeConfigIds(nextConfig))) as IProfileConfig
   }, signal)
 }
 
