@@ -96,3 +96,36 @@ describe('initProfileUpdater', () => {
     expect(mocks.addProfileItem).toHaveBeenCalledWith(remoteProfile)
   })
 })
+
+describe('findSubscriptionUpdateFlag', () => {
+  it('matches --update-subscription case-insensitively', async () => {
+    const { findSubscriptionUpdateFlag } = await import('./profileUpdater')
+    expect(findSubscriptionUpdateFlag(['app', '--update-subscription'])).toBe(true)
+    expect(findSubscriptionUpdateFlag(['app', '--Update-Subscription'])).toBe(true)
+    expect(findSubscriptionUpdateFlag(['app', '--other'])).toBe(false)
+    expect(findSubscriptionUpdateFlag(['app'])).toBe(false)
+  })
+})
+
+describe('forceUpdateAllProfiles', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('updates remote and plugin profiles only', async () => {
+    const items = [
+      { id: 'a', type: 'remote', name: 'A' },
+      { id: 'b', type: 'plugin', name: 'B', pluginId: 'p1' },
+      { id: 'c', type: 'local', name: 'C' }
+    ]
+    mocks.getProfileConfig.mockResolvedValue({ current: 'a', items })
+    mocks.getProfileItem.mockImplementation(async (id: string) => items.find((i) => i.id === id))
+
+    const { forceUpdateAllProfiles } = await import('./profileUpdater')
+    await forceUpdateAllProfiles()
+
+    expect(mocks.addProfileItem).toHaveBeenCalledTimes(1)
+    expect(mocks.addProfileItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
+    expect(mocks.updatePluginProfile).toHaveBeenCalledWith('p1')
+  })
+})
