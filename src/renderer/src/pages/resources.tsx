@@ -1,6 +1,5 @@
 import BasePage from '@renderer/components/base/base-page'
 import GeoData from '@renderer/components/resources/geo-data'
-import SmartModel from '@renderer/components/resources/smart-model'
 import ProxyProvider from '@renderer/components/resources/proxy-provider'
 import RuleProvider from '@renderer/components/resources/rule-provider'
 import { useAppConfig } from '@renderer/hooks/use-app-config'
@@ -11,7 +10,6 @@ import EditModeMenu from '@renderer/components/simple/edit-mode-menu'
 const Resources: React.FC = () => {
   const { t } = useTranslation()
   const { appConfig } = useAppConfig()
-  const { core = 'mihomo' } = appConfig || {}
   const simple = appConfig?.operationMode === 'simple'
   const [editing, setEditing] = useState(false)
   useEffect(() => {
@@ -23,7 +21,6 @@ const Resources: React.FC = () => {
       title={t('sider.cards.resources')}
       header={simple ? <EditModeMenu enabled={editing} onChange={setEditing} /> : undefined}
     >
-      {core === 'mihomo-smart' && <SmartModel />}
       <GeoData />
       <ProxyProvider />
       <RuleProvider editing={simple && editing} />

@@ -297,9 +297,19 @@ async function resolveProviderProxies(
   const providers =
     fallbackToAllProviders || providerNames.size > PROVIDER_DETAIL_FETCH_THRESHOLD
       ? Object.values((await mihomoProxyProviders()).providers)
-      : (
-          await Promise.allSettled([...providerNames].map((name) => mihomoProxyProvider(name)))
-        ).flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
+      : await (async () => {
+          const results = await Promise.allSettled(
+            [...providerNames].map((name) => mihomoProxyProvider(name))
+          )
+          if (results.every((result) => result.status === 'fulfilled')) {
+            return results.map((result) => result.value)
+          }
+
+          // A config hot reload can briefly mix the old /proxies snapshot with the
+          // new runtime config. Refresh the complete provider list instead of
+          // retrying stale provider names individually.
+          return Object.values((await mihomoProxyProviders()).providers)
+        })()
 
   const providerProxies: Record<string, IMihomoProxy> = {}
   providers.forEach((provider) => {
