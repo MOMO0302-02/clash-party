@@ -26,6 +26,17 @@ vi.mock('../utils/logger', () => ({
   logger: { warn: vi.fn() }
 }))
 
+// updateProfile 动态 import('../window') 会拉进 electron；CI `pnpm install --ignore-scripts`
+// 没有 Electron 二进制，require('electron') 会同步 spawn install.js 下载并把测试拖到超时。
+vi.mock('../window', () => ({ mainWindow: null }))
+vi.mock('electron', () => ({
+  app: { getVersion: () => '0.0.0-test' },
+  BrowserWindow: class {},
+  Menu: { buildFromTemplate: () => ({}) },
+  screen: {},
+  shell: { openExternal: vi.fn() }
+}))
+
 describe('initProfileUpdater', () => {
   beforeEach(() => {
     vi.clearAllMocks()
