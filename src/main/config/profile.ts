@@ -210,7 +210,14 @@ export async function updateProfileItem(
     if (index === -1) {
       throw new Error('Profile not found')
     }
-    config.items[index] = item
+    // lastUpdate* 由 addProfileItem 维护，整项覆盖时保留磁盘现值，避免陈旧快照抹掉后台写入
+    const existing = config.items[index]
+    config.items[index] = {
+      ...item,
+      lastUpdateAt: existing.lastUpdateAt,
+      lastUpdateOk: existing.lastUpdateOk,
+      lastUpdateError: existing.lastUpdateError
+    }
     return config
   })
   if (simpleOptions && (await getAppConfig()).operationMode === 'simple') {
@@ -235,7 +242,17 @@ export async function addProfileItem(
   item: Partial<IProfileItem>,
   simpleOptions?: SimpleSubscriptionOptions
 ): Promise<void> {
-  const newItem = await createProfile(item)
+  let newItem: IProfileItem
+  try {
+    newItem = await createProfile(item)
+    newItem.lastUpdateAt = Date.now()
+    newItem.lastUpdateOk = true
+    newItem.lastUpdateError = undefined
+  } catch (error) {
+    // 拉取失败也要落盘上次尝试结果，供 UI tooltip 展示（#1606）
+    await recordProfileUpdateFailure(item.id, error)
+    throw error
+  }
   let shouldChangeCurrent = false
   let newProfileIsCurrentAfterUpdate = false
   await updateProfileConfig((config) => {
@@ -276,6 +293,26 @@ export async function addProfileItem(
     await changeCurrentProfile(newItem.id)
   }
   await addProfileUpdater(newItem)
+}
+
+async function recordProfileUpdateFailure(id: string | undefined, error: unknown): Promise<void> {
+  if (!id) return
+  try {
+    const message = String((error as Error)?.message ?? error)
+    await updateProfileConfig((config) => {
+      const index = config.items.findIndex((i) => i.id === id)
+      if (index === -1) return config
+      config.items[index].lastUpdateAt = Date.now()
+      config.items[index].lastUpdateOk = false
+      config.items[index].lastUpdateError = message
+      return config
+    })
+    // 背景定时更新失败时渲染层无 mutate 兜底，需主动通知（#1606）
+    const { mainWindow } = await import('../window')
+    mainWindow?.webContents.send('profileConfigUpdated')
+  } catch (persistError) {
+    profileLogger.warn('Failed to persist profile update failure', persistError)
+  }
 }
 
 export async function removeProfileItem(id: string): Promise<void> {

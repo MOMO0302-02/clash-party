@@ -293,9 +293,31 @@ const ProfileItem: React.FC<Props> = (props) => {
                   <Tooltip
                     placement="left"
                     content={
-                      info.type === 'local'
-                        ? t('profiles.reloadLocal')
-                        : dayjs(info.updated).fromNow()
+                      info.type === 'local' ? (
+                        t('profiles.reloadLocal')
+                      ) : (
+                        <div className="flex flex-col gap-0.5 text-xs">
+                          <span>
+                            {t('profiles.updateStatus.lastUpdate', {
+                              time: dayjs(info.lastUpdateAt ?? info.updated).format(
+                                'YYYY-MM-DD HH:mm'
+                              )
+                            })}
+                          </span>
+                          {info.lastUpdateOk === true && (
+                            <span className="text-success">
+                              {t('profiles.updateStatus.success')}
+                            </span>
+                          )}
+                          {info.lastUpdateOk === false && (
+                            <span className="text-danger">
+                              {t('profiles.updateStatus.failed', {
+                                error: (info.lastUpdateError ?? '').slice(0, 120)
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      )
                     }
                   >
                     <Button

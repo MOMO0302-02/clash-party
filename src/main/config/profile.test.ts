@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { addProfileUpdater } from '../core/profileUpdater'
 import { getOverrideConfig, updateOverrideConfig } from './override'
 import {
+  addProfileItem,
   createProfile,
   getProfileConfig,
   getProfileItem,
@@ -96,6 +97,7 @@ vi.mock('../core/mihomoApi', () => ({
 }))
 vi.mock('../core/manager', () => ({
   checkProfileConfig: mocks.checkProfileConfig,
+  hasCoreProcess: () => true,
   restartCore: mocks.restartCore
 }))
 vi.mock('../core/profileUpdater', () => ({
@@ -120,6 +122,7 @@ vi.mock('./plugin', () => ({
     autoUpdate: item?.autoUpdate ?? true
   })
 }))
+vi.mock('../window', () => ({ mainWindow: null }))
 
 const oldProfile = `proxies:
   - name: old
@@ -204,6 +207,72 @@ describe('remote profile candidate validation', () => {
     expect(mocks.checkProfileConfig).toHaveBeenCalledOnce()
     expect(readFileSync(join(testDir, 'profiles', 'remote.yaml'), 'utf8')).toBe(newProfile)
     expect(mocks.hotReload).toHaveBeenCalledOnce()
+  })
+})
+
+describe('last update status (#1606)', () => {
+  it('records a successful remote update on the profile item', async () => {
+    await addProfileItem({
+      id: 'remote',
+      type: 'remote',
+      name: 'Remote',
+      url: 'https://example.test'
+    })
+
+    const item = await getProfileItem('remote')
+    expect(item?.lastUpdateOk).toBe(true)
+    expect(item?.lastUpdateError).toBeUndefined()
+    expect(typeof item?.lastUpdateAt).toBe('number')
+  })
+
+  it('persists a failed remote update and rethrows', async () => {
+    // direct + proxy fallback both fail
+    mocks.axiosGet.mockRejectedValue(new Error('network down'))
+
+    await expect(
+      addProfileItem({
+        id: 'remote',
+        type: 'remote',
+        name: 'Remote',
+        url: 'https://example.test'
+      })
+    ).rejects.toThrow('network down')
+
+    const item = await getProfileItem('remote')
+    expect(item?.lastUpdateOk).toBe(false)
+    expect(item?.lastUpdateError).toContain('network down')
+    expect(typeof item?.lastUpdateAt).toBe('number')
+
+    mocks.axiosGet.mockReset()
+    mocks.axiosGet.mockResolvedValue({
+      status: 200,
+      data: newProfile,
+      headers: { 'content-type': 'text/yaml' }
+    })
+  })
+
+  it('updateProfileItem keeps lastUpdate* fields from disk', async () => {
+    await addProfileItem({
+      id: 'remote',
+      type: 'remote',
+      name: 'Remote',
+      url: 'https://example.test'
+    })
+    const before = await getProfileItem('remote')
+
+    await updateProfileItem({
+      ...(before as IProfileItem),
+      name: 'Renamed',
+      lastUpdateAt: undefined,
+      lastUpdateOk: undefined,
+      lastUpdateError: 'stale'
+    })
+
+    const after = await getProfileItem('remote')
+    expect(after?.name).toBe('Renamed')
+    expect(after?.lastUpdateOk).toBe(true)
+    expect(after?.lastUpdateAt).toBe(before?.lastUpdateAt)
+    expect(after?.lastUpdateError).toBeUndefined()
   })
 })
 

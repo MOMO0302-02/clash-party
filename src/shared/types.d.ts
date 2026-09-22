@@ -613,6 +613,9 @@ interface IProfileItem {
   userAgent?: string
   ageSecretKey?: string
   updateTimeout?: number
+  lastUpdateAt?: number
+  lastUpdateOk?: boolean
+  lastUpdateError?: string
   pluginId?: string
 }
 
