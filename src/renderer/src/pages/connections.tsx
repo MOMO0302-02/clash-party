@@ -42,6 +42,7 @@ import { saveIconToCache, getIconFromCache } from '@renderer/utils/icon-cache'
 import { cropAndPadTransparent } from '@renderer/utils/image'
 import { platform } from '@renderer/utils/init'
 import { useControledMihomoConfig } from '@renderer/hooks/use-controled-mihomo-config'
+import { useImeSafeValueChange } from '@renderer/hooks/use-ime-safe-value-change'
 
 let cachedConnections: IMihomoConnectionDetail[] = []
 const MAX_QUEUE_SIZE = 100
@@ -74,6 +75,7 @@ const Connections: React.FC = () => {
   const { controledMihomoConfig } = useControledMihomoConfig()
   const { 'find-process-mode': findProcessMode = 'always' } = controledMihomoConfig || {}
   const [filter, setFilter] = useState(() => localStorage.getItem(CONNECTIONS_FILTER_KEY) || '')
+  const filterIme = useImeSafeValueChange(setFilter)
   const { appConfig, patchAppConfig } = useAppConfig()
   const appConfigValues: Partial<IAppConfig> = appConfig ?? {}
   const {
@@ -710,7 +712,9 @@ const Connections: React.FC = () => {
             value={filter}
             placeholder={t('connections.filter')}
             isClearable
-            onValueChange={setFilter}
+            onValueChange={filterIme.onValueChange}
+            onCompositionStart={filterIme.onCompositionStart}
+            onCompositionEnd={filterIme.onCompositionEnd}
           />
 
           {viewMode === 'table' && (

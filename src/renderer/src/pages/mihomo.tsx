@@ -45,7 +45,7 @@ import {
   clearMihomoVersionCache,
   mihomoUpgradeUI
 } from '@renderer/utils/ipc'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import InterfaceModal from '@renderer/components/mihomo/interface-modal'
 import SmartModel from '@renderer/components/mihomo/smart-model'
 import { MdDeleteForever, MdOpenInNew } from 'react-icons/md'
@@ -177,6 +177,7 @@ const Mihomo: React.FC = () => {
   const [selectedTag, setSelectedTag] = useState(specificVersion || '')
   const [installing, setInstalling] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const composingRef = useRef(false)
   const [refreshing, setRefreshing] = useState(false)
 
   // 生成随机端口 (范围 1024-65535)
@@ -1565,7 +1566,16 @@ const Mihomo: React.FC = () => {
                 <Input
                   placeholder={t('mihomo.searchVersion')}
                   value={searchTerm}
-                  onValueChange={setSearchTerm}
+                  onValueChange={(v) => {
+                    if (!composingRef.current) setSearchTerm(v)
+                  }}
+                  onCompositionStart={() => {
+                    composingRef.current = true
+                  }}
+                  onCompositionEnd={(e) => {
+                    composingRef.current = false
+                    setSearchTerm(e.currentTarget.value)
+                  }}
                   className="flex-1"
                 />
                 <Button
