@@ -428,22 +428,45 @@ export async function createTray(): Promise<void> {
     }
     // 移除旧监听器防止累积
     ipcMain.removeAllListeners('trayIconUpdate')
-    ipcMain.on('trayIconUpdate', async (_, png: string, enabled: boolean, colored = false) => {
-      macTrafficIconEnabled = enabled
-      const appConfig = await getAppConfig()
-      const status = await getTrayIconStatus()
-      const mode = await getTrayMode()
-      const customIcon = createCustomTrayImageForStatus(appConfig, status)
-      if (customIcon) {
-        await setTrayImage(customIcon, mode)
-        await updateTrayToolTip(undefined, undefined, true)
-        return
+    // 网速 IPC 可能突发连发；串行化 + 尾帧合并，避免并发 setImage 把菜单栏抖糊（#1543 Q1）
+    let trayIconUpdateChain: Promise<void> = Promise.resolve()
+    let pendingTrayIconUpdate: { png: string; enabled: boolean; colored: boolean } | null = null
+    let trayIconUpdateScheduled = false
+    const flushTrayIconUpdate = (): void => {
+      trayIconUpdateScheduled = false
+      const next = pendingTrayIconUpdate
+      pendingTrayIconUpdate = null
+      if (!next) return
+      trayIconUpdateChain = trayIconUpdateChain
+        .then(async () => {
+          const { png, enabled, colored } = next
+          macTrafficIconEnabled = enabled
+          const appConfig = await getAppConfig()
+          const status = await getTrayIconStatus()
+          const mode = await getTrayMode()
+          const customIcon = createCustomTrayImageForStatus(appConfig, status)
+          if (customIcon) {
+            await setTrayImage(customIcon, mode)
+            await updateTrayToolTip(undefined, undefined, true)
+            return
+          }
+          // 固定宽高，避免 resize 按高度推宽度时出现亚像素差异导致状态栏回流
+          const image = nativeImage.createFromDataURL(png).resize({ width: 69, height: 16 })
+          // 带状态色的图不能当 template image，否则 macOS 只取 alpha 通道，颜色会被丢掉（#1143）
+          image.setTemplateImage(!colored)
+          await setTrayImage(image, mode)
+          await updateTrayToolTip(undefined, undefined, false)
+        })
+        .catch(() => {
+          // 托盘更新失败不拖垮主进程
+        })
+    }
+    ipcMain.on('trayIconUpdate', (_event, png: string, enabled: boolean, colored = false) => {
+      pendingTrayIconUpdate = { png, enabled, colored: Boolean(colored) }
+      if (!trayIconUpdateScheduled) {
+        trayIconUpdateScheduled = true
+        setTimeout(flushTrayIconUpdate, 50)
       }
-      const image = nativeImage.createFromDataURL(png).resize({ height: 16 })
-      // 带状态色的图不能当 template image，否则 macOS 只取 alpha 通道，颜色会被丢掉（#1143）
-      image.setTemplateImage(!colored)
-      await setTrayImage(image, mode)
-      await updateTrayToolTip(undefined, undefined, false)
     })
     // macOS 默认行为：左键显示窗口，右键显示菜单
     tray?.addListener('click', async () => {
