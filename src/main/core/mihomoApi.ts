@@ -21,6 +21,8 @@ let currentIpcPath: string = ''
 
 const MAX_RETRY = 10
 const RECONNECT_INTERVAL_MS = 1000
+// 快速重试用完后改成慢速重试，但只要流还是活的就永不放弃（#1410）
+const SLOW_RECONNECT_INTERVAL_MS = 15000
 
 interface MihomoStreamState {
   ws: WebSocket | null
@@ -66,6 +68,7 @@ function clearStreamReconnect(stream: MihomoStreamState): void {
 }
 
 function disposeStreamSocket(ws: WebSocket): void {
+  ws.onopen = null
   ws.onmessage = null
   ws.onclose = null
   ws.onerror = null
@@ -116,21 +119,34 @@ function isCurrentStream(stream: MihomoStreamState, generation: number): boolean
   return stream.active && stream.generation === generation
 }
 
+// 打开即回填重试预算：只等首条消息会让“连上但暂无消息”的流（如空闲 /connections）
+// 白烧完 10 次预算后永久死掉（#1410 / 分支 1a29f754）
+function armStreamSocket(stream: MihomoStreamState, generation: number, ws: WebSocket): void {
+  ws.onopen = (): void => {
+    if (!isCurrentStream(stream, generation)) return
+    stream.retry = MAX_RETRY
+  }
+}
+
 function scheduleStreamReconnect(
   stream: MihomoStreamState,
   generation: number,
   connect: () => Promise<void>
 ): void {
-  if (!isCurrentStream(stream, generation) || stream.retry <= 0) return
+  if (!isCurrentStream(stream, generation)) return
 
-  stream.retry--
+  // 流被显式停止时 active 会置 false（内核停止/重启都会走 stopStream），所以这里只要
+  // 还是活的就继续重连。以前重试 10 次就永久放弃，内核明明还活着，流量/连接/内存/日志
+  // 却再也不会恢复，只能重启内核或整个应用（#1410）。
+  const interval = stream.retry > 0 ? RECONNECT_INTERVAL_MS : SLOW_RECONNECT_INTERVAL_MS
+  if (stream.retry > 0) stream.retry--
   clearStreamReconnect(stream)
   stream.reconnectTimer = setTimeout(() => {
     stream.reconnectTimer = null
     if (isCurrentStream(stream, generation)) {
       void connect()
     }
-  }, RECONNECT_INTERVAL_MS)
+  }, interval)
 }
 
 function closeErroredStreamSocket(
@@ -517,6 +533,7 @@ const mihomoTraffic = async (): Promise<void> => {
 
   mihomoApiLogger.info(`Creating traffic WebSocket with URL: ${wsUrl}, IPC path: ${ipcPath}`)
   trafficStream.ws = ws
+  armStreamSocket(trafficStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(trafficStream, generation)) return
@@ -569,6 +586,7 @@ const mihomoMemory = async (): Promise<void> => {
 
   const { ws } = createMihomoWebSocket('/memory')
   memoryStream.ws = ws
+  armStreamSocket(memoryStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(memoryStream, generation)) return
@@ -610,6 +628,7 @@ const mihomoLogs = async (): Promise<void> => {
 
   const { ws } = createMihomoWebSocket(`/logs?level=${logLevel}`)
   logsStream.ws = ws
+  armStreamSocket(logsStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(logsStream, generation)) return
@@ -649,6 +668,7 @@ const mihomoConnections = async (): Promise<void> => {
 
   const { ws } = createMihomoWebSocket('/connections')
   connectionsStream.ws = ws
+  armStreamSocket(connectionsStream, generation, ws)
 
   ws.onmessage = (e): void => {
     if (!isCurrentStream(connectionsStream, generation)) return
