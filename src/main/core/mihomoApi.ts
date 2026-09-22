@@ -653,6 +653,20 @@ const mihomoLogs = async (): Promise<void> => {
   }
 }
 
+// 最近一次连接快照：窗口不可见时推送被门控，渲染层 mount/重新可见时靠它回放（#1678）
+let lastConnectionsInfo: IMihomoConnectionsInfo | null = null
+
+export const getMihomoConnectionsSnapshot = async (): Promise<IMihomoConnectionsInfo | null> => {
+  return lastConnectionsInfo
+}
+
+export const sendMihomoConnectionsSnapshot = (): void => {
+  if (!lastConnectionsInfo) return
+  if (__LEGACY_BUILD__ || mainWindow?.isVisible()) {
+    mainWindow?.webContents.send('mihomoConnections', lastConnectionsInfo)
+  }
+}
+
 export const startMihomoConnections = async (): Promise<void> => {
   activateStream(connectionsStream)
   await mihomoConnections()
@@ -678,6 +692,8 @@ const mihomoConnections = async (): Promise<void> => {
     try {
       const info = JSON.parse(data) as IMihomoConnectionsInfo
       recordTrafficUsage(info)
+      // 始终缓存，窗口可见才推送；否则隐藏期间的帧会整段丢掉且无法回放（#1678）
+      lastConnectionsInfo = info
       if (__LEGACY_BUILD__ || mainWindow?.isVisible()) {
         mainWindow?.webContents.send('mihomoConnections', info)
       }

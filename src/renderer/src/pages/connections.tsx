@@ -2,6 +2,7 @@ import BasePage from '@renderer/components/base/base-page'
 import {
   mihomoCloseAllConnections,
   mihomoCloseConnection,
+  getMihomoConnectionsSnapshot,
   getIconDataURL,
   getAppName
 } from '@renderer/utils/ipc'
@@ -503,12 +504,32 @@ const Connections: React.FC = () => {
       })
     }
 
+    // 主进程在窗口不可见时会门控推送；mount 与重新可见时主动拉快照回放（#1678）
+    const pullSnapshot = async (): Promise<void> => {
+      try {
+        const info = await getMihomoConnectionsSnapshot()
+        if (!info || document.hidden) return
+        updateConnections(info)
+      } catch {
+        // 快照不可用时继续等 WS 推送
+      }
+    }
+
+    const onVisibilityChange = (): void => {
+      if (document.hidden) return
+      void pullSnapshot()
+    }
+
+    void pullSnapshot()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     let unsubscribe: (() => void) | null = null
     if (!isPaused) {
       unsubscribe = window.electron.ipcRenderer.on('mihomoConnections', handler)
     }
 
     return (): void => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       unsubscribe?.()
       if (frameId !== undefined) window.cancelAnimationFrame(frameId)
       pendingInfo = undefined

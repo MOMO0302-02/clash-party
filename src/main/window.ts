@@ -297,6 +297,8 @@ function setupWindowEvents(window: BrowserWindow): void {
 
   window.on('show', () => {
     showDockIcon()
+    // 窗口从隐藏恢复时立刻回放最近连接快照，避免连接页空白直到下一帧 WS（#1678）
+    void import('./core/mihomoApi').then((m) => m.sendMihomoConnectionsSnapshot()).catch(() => {})
   })
 
   window.on('close', async (event) => {
