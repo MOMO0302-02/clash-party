@@ -745,27 +745,33 @@ function setupCoreListeners(
       (process.platform === 'win32' && str.includes('RESTful API pipe listening at'))
 
     if (isApiReady) {
-      resolveStartup([
-        new Promise((innerResolve) => {
-          proc.stdout?.on('data', async (innerData) => {
-            if (
-              innerData
-                .toString()
-                .toLowerCase()
-                .includes('start initial compatible provider default')
-            ) {
-              completeCoreStartup()
-                .then(() => innerResolve())
-                .catch((error) => {
-                  managerLogger.warn('Failed to complete core startup', error)
-                  innerResolve()
-                })
-            }
-          })
-        })
-      ])
+      try {
+        // API 就绪即完成启动通知：以前必须等到日志行
+        // "start initial compatible provider default"，无 compatible provider 或
+        // log-level 过低时该行永不出现 → groupsUpdated/rulesUpdated 永不发送，
+        // 渲染层只能靠 30s 轮询 + keepPreviousData 挂着旧订阅组（#1198）
+        const startupCompletion = startMihomoApiStreams().then(() => completeCoreStartup())
+        resolveStartup([startupCompletion])
 
-      await startMihomoApiStreams()
+        // 内核装载完 provider 后再补发一次：API 端口先于代理组装载就绪，
+        // 上面的刷新可能取到尚未更新的代理组。
+        const notifyProvidersReady = (innerData: Buffer): void => {
+          if (
+            !innerData
+              .toString()
+              .toLowerCase()
+              .includes('start initial compatible provider default')
+          ) {
+            return
+          }
+          proc.stdout?.off('data', notifyProvidersReady)
+          mainWindow?.webContents.send('groupsUpdated')
+          mainWindow?.webContents.send('rulesUpdated')
+        }
+        proc.stdout?.on('data', notifyProvidersReady)
+      } catch (error) {
+        rejectStartup(error)
+      }
     }
   })
 
