@@ -12,6 +12,7 @@ import { parse, stringify } from '../utils/yaml'
 import { defaultProfile } from '../utils/template'
 import { decryptAgeContent } from '../utils/age'
 import { DEFAULT_MIHOMO_PORTS } from '../../shared/appConfig'
+import { normalizeUrlInput } from '../../shared/urlInput'
 import { subStorePort } from '../resolve/server'
 import { mihomoCloseAllConnections, mihomoHotReloadConfig } from '../core/mihomoApi'
 import {
@@ -564,6 +565,9 @@ async function fetchAndValidateSubscription(options: FetchOptions): Promise<Fetc
 
 export async function createProfile(item: Partial<IProfileItem>): Promise<IProfileItem> {
   const id = item.id || new Date().getTime().toString(16)
+  // #756: 中文 IME 手输 URL 常混入全角标点（：/． 等），肉眼与半角一致但
+  // new URL/axios 抛 "Invalid URL"，同一字符串粘贴却成功；入口统一转半角并去空白。
+  if (item.url) item = { ...item, url: normalizeUrlInput(item.url) }
   const newItem: IProfileItem = {
     id,
     name: item.name || (item.type === 'remote' ? 'Remote File' : 'Local File'),
