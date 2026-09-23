@@ -244,6 +244,15 @@ export async function grantTunPermissions(): Promise<void> {
   const corePath = mihomoCorePath(core)
   validateCorePath(corePath)
 
+  // 已具备 setuid+root 时跳过提权，避免 SIP 场景下重复 osascript/pkexec 报错（#1744）
+  if (process.platform === 'darwin' || process.platform === 'linux') {
+    const alreadyGranted = await checkMihomoCorePermissions()
+    if (alreadyGranted) {
+      managerLogger.info('Core already has required permissions, skipping elevation')
+      return
+    }
+  }
+
   if (process.platform === 'darwin') {
     const escapedPath = shellEscape(corePath)
     const script = `do shell script "chown root:admin ${escapedPath} && chmod +sx ${escapedPath}" with administrator privileges`
