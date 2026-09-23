@@ -387,6 +387,8 @@ interface IAppConfig {
   subscriptionTimeout?: number
   encryptedPassword?: number[]
   controlDns?: boolean
+  // 用户对“该订阅含自定义 DNS 字段仍开启覆写”的确认指纹；跨重启持久，避免每次启动被再次自动关闭（#2167）
+  dnsOverrideConfirmedFingerprint?: string | null
   controlSniff?: boolean
   controlTun?: boolean
   useDockIcon?: boolean

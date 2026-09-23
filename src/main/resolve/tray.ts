@@ -561,6 +561,18 @@ export async function copyEnv(
 
 export async function showTrayIcon(): Promise<void> {
   if (!tray) {
+    // #1398：尊重“禁用托盘图标”，任何常规路径都不得在重启后把托盘复活。
+    const { disableTray = false } = await getAppConfig()
+    if (disableTray) return
+    await createTray()
+  }
+}
+
+// 悬浮窗不可用时的兜底入口：即使用户禁用了托盘也要补回本会话入口（#2046），
+// 但绝不覆写 disableTray 偏好，避免一次悬浮窗异常让设置永久失效、重启后图标违背
+// 用户设置再次出现（#1398）。
+export async function showTrayIconForFallback(): Promise<void> {
+  if (!tray) {
     await createTray()
   }
 }

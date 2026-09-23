@@ -488,8 +488,16 @@ async function prepareCore(detached: boolean, skipStop = false): Promise<CoreCon
   }
   await cleanupSocketFile()
 
-  // 设置 DNS
-  if (tun?.enable && autoSetDNS) {
+  // 设置 DNS（#2176）：仅当 DNS 劫持真实生效且 DNS 模块启用时才允许把系统 DNS 写成
+  // 公共 DNS。关闭“启用 DNS”或配置未指定 DNS（工厂会清空 dns-hijack）时必须保留
+  // 系统默认 DNS，否则 Helper 每次启动都会把 macOS 系统 DNS 固定成 223.5.5.5。
+  const generatedConfig = await getRuntimeConfig()
+  const generatedDnsHijack = generatedConfig.tun?.['dns-hijack']
+  const hijackActive = Array.isArray(generatedDnsHijack)
+    ? generatedDnsHijack.length > 0
+    : Boolean(generatedDnsHijack)
+  const dnsModuleEnabled = generatedConfig.dns?.enable !== false
+  if (tun?.enable && autoSetDNS && hijackActive && dnsModuleEnabled) {
     ensureNotShuttingDown()
     try {
       await setPublicDNS()

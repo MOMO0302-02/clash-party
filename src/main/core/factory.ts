@@ -31,7 +31,11 @@ import {
 } from '../../shared/appConfig'
 import { atomicWriteFile } from '../utils/safeFile'
 import { compileSimpleRuntime } from '../simple/service'
-import { evaluateDnsOverrideGuard, type DnsOverrideGuardResult } from './dnsOverrideGuard'
+import {
+  ensureDnsOverrideGuardHydrated,
+  evaluateDnsOverrideGuard,
+  type DnsOverrideGuardResult
+} from './dnsOverrideGuard'
 
 const factoryLogger = createLogger('Factory')
 const SMART_OVERRIDE_ID = 'smart-core-override'
@@ -177,6 +181,7 @@ export async function generateProfile(
     useNameserverPolicy
   } = appConfig
   // DNS 保护先于覆写和脚本处理，开关在内核应用成功后同步。
+  await ensureDnsOverrideGuardHydrated()
   const dnsGuard = evaluateDnsOverrideGuard(
     profileId ?? 'default',
     baseProfile,
@@ -212,6 +217,24 @@ export async function generateProfile(
   }
   if (!useNameserverPolicy) {
     delete controledMihomoConfig?.dns?.['nameserver-policy']
+  }
+
+  // 受控 TUN 层的路由数组不能整体替换 profile+override 的合并结果，否则覆写里
+  // `+route-exclude-address` / `+route-address` 追加的条目会被空数组冲掉（#704，
+  // exclude-interface 不在受控层才幸存）。GUI 空列表视为“无意见”保留既有值，
+  // 非空时与 profile+override 并集去重，两侧配置同时生效。
+  const controlledTun = controledMihomoConfig.tun
+  if (controlledTun) {
+    const mergedTun = { ...controlledTun }
+    for (const key of ['route-exclude-address', 'route-address'] as const) {
+      const fromControlled = mergedTun[key]
+      if (!Array.isArray(fromControlled)) continue
+      const fromProfile = Array.isArray(currentProfile.tun?.[key])
+        ? (currentProfile.tun?.[key] as string[])
+        : []
+      mergedTun[key] = [...new Set([...fromControlled, ...fromProfile])]
+    }
+    controledMihomoConfig = { ...controledMihomoConfig, tun: mergedTun }
   }
 
   const profile = deepMerge(currentProfile, controledMihomoConfig)
