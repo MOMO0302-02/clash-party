@@ -554,7 +554,6 @@ const mihomoTraffic = async (): Promise<void> => {
       // JSON.parse 必须放在 try 内：内核发来非 JSON 帧时，旧实现会在 async 回调里
       // 抛出并变成未捕获的 Promise rejection（其余三条流都已在 try 内解析）。
       const json = JSON.parse(data) as IMihomoTrafficInfo
-      mainWindow?.webContents.send('mihomoTraffic', json)
       if (process.platform !== 'linux') {
         tray?.setToolTip(
           '↑' +
@@ -564,6 +563,11 @@ const mihomoTraffic = async (): Promise<void> => {
         )
       }
       floatingWindow?.webContents.send('mihomoTraffic', json)
+      // 主窗隐藏仍推送：macOS showTraffic 托盘网速在渲染层合成（#1543 Q1），
+      // 与 #698 无关；隐藏时的图表重绘由 conn-card 自己跳过。
+      if (__LEGACY_BUILD__ || mainWindow?.isVisible() || process.platform === 'darwin') {
+        mainWindow?.webContents.send('mihomoTraffic', json)
+      }
     } catch {
       // ignore
     }
@@ -603,6 +607,8 @@ const mihomoMemory = async (): Promise<void> => {
 
     const data = e.data as string
     memoryStream.retry = MAX_RETRY
+    // 主窗口隐藏时不再灌渲染层（#698）：关窗后内存卡不可见，继续 IPC 只烧 CPU
+    if (!__LEGACY_BUILD__ && !mainWindow?.isVisible()) return
     try {
       mainWindow?.webContents.send('mihomoMemory', JSON.parse(data) as IMihomoMemoryInfo)
     } catch {
@@ -645,6 +651,9 @@ const mihomoLogs = async (): Promise<void> => {
 
     const data = e.data as string
     logsStream.retry = MAX_RETRY
+    // 窗口隐藏时丢弃日志帧（#698）：内核刷日志 + 无界面仍 JSON.parse/IPC 会把 Helper Renderer 打满；
+    // 日志页随窗口一起不可见，恢复显示后从下一帧继续即可（与连接流可见性门控同一策略）。
+    if (!__LEGACY_BUILD__ && !mainWindow?.isVisible()) return
     try {
       mainWindow?.webContents.send('mihomoLogs', JSON.parse(data) as IMihomoLogInfo)
     } catch {

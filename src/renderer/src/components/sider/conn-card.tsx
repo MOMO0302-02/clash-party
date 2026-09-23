@@ -138,14 +138,21 @@ const ConnCard: React.FC<Props> = (props) => {
   // 使用 useCallback 创建稳定的 handler 引用，通过 ref 读取 showTraffic 避免重建
   const handleTraffic = useCallback((_e: unknown, ...args: unknown[]) => {
     const info = args[0] as IMihomoTrafficInfo
-    setUpload(info.up)
-    setDownload(info.down)
-    setSeries((prev) => {
-      const data = [...prev]
-      data.shift()
-      data.push(info.up + info.down)
-      return data
-    })
+    // 关窗隐藏后仍会收到 mihomoTraffic（macOS 托盘网速依赖它，#1543 Q1）。
+    // 隐藏时跳过 Chart/React 状态更新，避免 Helper (Renderer) 后台 100%（#698）。
+    if (document.hidden) {
+      currentUploadRef.current = info.up
+      currentDownloadRef.current = info.down
+    } else {
+      setUpload(info.up)
+      setDownload(info.down)
+      setSeries((prev) => {
+        const data = [...prev]
+        data.shift()
+        data.push(info.up + info.down)
+        return data
+      })
+    }
     if (platform === 'darwin' && showTrafficRef.current) {
       const up = info.up
       const down = info.down
