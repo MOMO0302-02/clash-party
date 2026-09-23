@@ -50,6 +50,23 @@ const mainWindowSeen = []
 let ticks = 0
 let settled = false
 
+// Attribution: log who calls window.show() and when windows get created/activated.
+const origShow = BrowserWindow.prototype.show
+BrowserWindow.prototype.show = function show(...args) {
+  console.log(
+    `PROBE_TRACE show_call bounds=${JSON.stringify(this.getBounds())} stack=${String(new Error().stack).split('\n').slice(1, 5).join(' | ')}`
+  )
+  return origShow.apply(this, args)
+}
+app.on('activate', () => console.log('PROBE_TRACE app_activate'))
+app.on('second-instance', () => console.log('PROBE_TRACE second_instance'))
+app.on('browser-window-created', (_e, win) => {
+  console.log(`PROBE_TRACE window_created bounds=${JSON.stringify(win.getBounds())}`)
+  win.on('show', () =>
+    console.log(`PROBE_TRACE window_show bounds=${JSON.stringify(win.getBounds())}`)
+  )
+})
+
 function snapshot() {
   return BrowserWindow.getAllWindows().map((w) => ({
     title: w.getTitle(),
@@ -106,6 +123,7 @@ function finish() {
     // best-effort marker cleanup
   }
   console.log(`PROBE_GUI_JSON ${JSON.stringify(verdict)}`)
+  process.exitCode = ok ? 0 : 1
   app.quit()
   setTimeout(() => app.exit(ok ? 0 : 1), 6000)
 }

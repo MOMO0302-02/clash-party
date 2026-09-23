@@ -447,7 +447,15 @@ app
       mainWindow?.webContents.send('core-started')
     }
 
+    // #408：静默启动 + 悬浮窗时，悬浮窗 show() 会向系统派发 activate，若照常
+    // showMainWindow() 会把主窗拉出来，违背「静默启动」。启动后 10 秒内忽略
+    // activate 触发的主窗显示（托盘/悬浮卡片/快捷键各自的用户通道不受影响）。
+    const bootStartedAt = Date.now()
     app.on('activate', () => {
+      if (Date.now() - bootStartedAt < 10000) {
+        mainLogger.info('activate ignored during startup grace period (#408)')
+        return
+      }
       showMainWindow()
     })
   })

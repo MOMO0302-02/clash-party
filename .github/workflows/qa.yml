@@ -135,30 +135,34 @@ jobs:
           sudo chmod 4755 "$SANDBOX"
       - name: GUI smoke (silent start)
         if: runner.os == 'Linux'
+        continue-on-error: true
         env:
           PROBE_GUI_SCENARIO: silent
         run: xvfb-run -a node_modules/.bin/electron scripts/probes/gui-window-smoke.mjs
       - name: GUI smoke (control)
         if: runner.os == 'Linux'
+        continue-on-error: true
         env:
           PROBE_GUI_SCENARIO: normal
         run: xvfb-run -a node_modules/.bin/electron scripts/probes/gui-window-smoke.mjs
       - name: GUI smoke (silent start)
         if: runner.os == 'Windows'
+        continue-on-error: true
         env:
           PROBE_GUI_SCENARIO: silent
         run: node_modules\.bin\electron.cmd scripts\probes\gui-window-smoke.mjs
       - name: GUI smoke (control)
         if: runner.os == 'Windows'
+        continue-on-error: true
         env:
           PROBE_GUI_SCENARIO: normal
         run: node_modules\.bin\electron.cmd scripts\probes\gui-window-smoke.mjs
-      - name: Assert verdicts present
+      - name: Assert verdicts
         shell: bash
         run: |
           ls -la probe-artifacts/
-          test -f probe-artifacts/gui-silent-verdict.json
-          test -f probe-artifacts/gui-normal-verdict.json
+          jq -e '.ok == true' probe-artifacts/gui-silent-verdict.json
+          jq -e '.ok == true' probe-artifacts/gui-normal-verdict.json
           echo '--- silent ---' && cat probe-artifacts/gui-silent-verdict.json
           echo '--- normal ---' && cat probe-artifacts/gui-normal-verdict.json
       - name: Upload GUI evidence
