@@ -126,6 +126,13 @@ jobs:
         run: node scripts/prepare.mjs
       - name: Build
         run: pnpm exec electron-vite build
+      - name: Fix chrome-sandbox permissions (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          SANDBOX=$(find node_modules -name chrome-sandbox -path '*electron*' | head -1)
+          echo "sandbox helper: $SANDBOX"
+          sudo chown root:root "$SANDBOX"
+          sudo chmod 4755 "$SANDBOX"
       - name: GUI smoke (silent start)
         if: runner.os == 'Linux'
         env:
