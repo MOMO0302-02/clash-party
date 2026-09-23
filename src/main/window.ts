@@ -242,8 +242,10 @@ async function createWindowInternal(): Promise<void> {
     scheduleQuitWithoutCore(autoQuitWithoutCoreDelay, autoQuitWithoutCoreMode)
   }
 
-  // 开发模式下始终显示窗口
-  if (!silentStart || is.dev) {
+  // 静默启动不显示主窗。不再被 is.dev 旁路：未打包运行时 is.dev=true 会让
+  // silentStart 永远失效（云端 GUI 冒烟因此测不到静默契约，#408 类问题也
+  // 观察不到）。设置应在打包/未打包两种形态下一致生效。
+  if (!silentStart) {
     clearQuitTimeout()
     mainWindow.show()
     mainWindow.focusOnWebView()

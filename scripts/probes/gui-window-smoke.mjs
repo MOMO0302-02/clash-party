@@ -24,27 +24,40 @@ const userData = join(tmpdir(), `clash-party-gui-smoke-${scenario}-${process.pid
 mkdirSync(userData, { recursive: true })
 app.setPath('userData', userData)
 
-writeFileSync(
-  join(userData, 'config.yaml'),
-  [
-    'modeSelected: true',
-    'operationMode: standard',
-    `silentStart: ${scenario === 'silent'}`,
-    'showFloatingWindow: true',
-    'disableTray: true',
-    'testProfileOnStart: false',
-    'enableTrafficLogger: false',
-    'autoQuitWithoutCore: false',
-    'controlDns: false',
-    'controlSniff: false',
-    'controlTun: false',
-    'sysProxy:',
-    '  enable: false',
-    '  mode: manual',
-    ''
-  ].join('\n')
-)
-writeFileSync(join(userData, 'mihomo.yaml'), 'mixed-port: 17890\n')
+const configYaml = [
+  'modeSelected: true',
+  'operationMode: standard',
+  `silentStart: ${scenario === 'silent'}`,
+  'showFloatingWindow: true',
+  'disableTray: true',
+  'testProfileOnStart: false',
+  'enableTrafficLogger: false',
+  'autoQuitWithoutCore: false',
+  'controlDns: false',
+  'controlSniff: false',
+  'controlTun: false',
+  'sysProxy:',
+  '  enable: false',
+  '  mode: manual',
+  ''
+].join('\n')
+const mihomoYaml = 'mixed-port: 17890\n'
+
+writeFileSync(join(userData, 'config.yaml'), configYaml)
+writeFileSync(join(userData, 'mihomo.yaml'), mihomoYaml)
+
+// configureAppPaths() (main index, runs at import) forces userData to
+// appData/mihomo-party-dev for unpackaged runs — which is how this smoke boots.
+// Seed that path too, otherwise getAppConfig() never sees the scenario flags.
+try {
+  const forcedDevUserData = join(app.getPath('appData'), 'mihomo-party-dev')
+  mkdirSync(forcedDevUserData, { recursive: true })
+  writeFileSync(join(forcedDevUserData, 'config.yaml'), configYaml)
+  writeFileSync(join(forcedDevUserData, 'mihomo.yaml'), mihomoYaml)
+  console.log(`PROBE_TRACE seeded_dev_userdata=${forcedDevUserData}`)
+} catch (err) {
+  console.log(`PROBE_TRACE seed_dev_userdata_failed ${String(err)}`)
+}
 
 const mainWindowSeen = []
 let ticks = 0
@@ -65,6 +78,17 @@ app.on('browser-window-created', (_e, win) => {
   win.on('show', () =>
     console.log(`PROBE_TRACE window_show bounds=${JSON.stringify(win.getBounds())}`)
   )
+  // Unpacked runs keep is.dev=true → main window auto-opens DevTools; a detached
+  // DevTools window would pollute the ≥600×400 visibility heuristic. Keep it docked
+  // closed — the smoke only measures app windows.
+  win.webContents.on('devtools-opened', () => {
+    try {
+      win.webContents.closeDevTools()
+      console.log('PROBE_TRACE devtools_closed')
+    } catch {
+      // best-effort
+    }
+  })
 })
 
 function snapshot() {
