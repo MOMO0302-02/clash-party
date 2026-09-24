@@ -40,6 +40,14 @@ jobs:
           set -euo pipefail
           pkg=$(find dist -maxdepth 1 -name '*.pkg' -print -quit)
           test -n "$pkg"
+          rm -rf /tmp/cp-pkg-expanded
+          pkgutil --expand-full "$pkg" /tmp/cp-pkg-expanded || true
+          echo '--- package scripts and metadata ---'
+          find /tmp/cp-pkg-expanded -maxdepth 6 -type f -print | sort || true
+          echo '--- xar script entries ---'
+          xar -tf "$pkg" | grep -Ei 'scripts|preinstall|postinstall' || true
+          echo '--- pkgutil payload ---'
+          pkgutil --payload-files "$pkg" | grep -Ei 'postinstall|party.mihomo|sidecar' | head -50 || true
           set +e
           sudo installer -pkg "$pkg" -target / > /tmp/clash-party-installer.log 2>&1
           rc=$?
@@ -65,5 +73,8 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: macos-package-installer-log
-          path: /tmp/clash-party-installer.log
+          path: |
+            /tmp/clash-party-installer.log
+            /tmp/mihomo-party-install.log
+            /tmp/cp-pkg-expanded
           if-no-files-found: ignore
