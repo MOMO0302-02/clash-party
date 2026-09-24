@@ -17,6 +17,7 @@ import {
   checkAdminPrivileges,
   initCoreWatcher
 } from './core/manager'
+import { validateTunPermissionsOnStartup } from './core/permissions'
 import { createTray } from './resolve/tray'
 import { init, initBasic, safeShowErrorBox, startSubStoreServices } from './utils/init'
 import { initShortcut } from './resolve/shortcut'
@@ -360,6 +361,14 @@ app
 
       try {
         initCoreWatcher()
+        // Validate Windows TUN permissions before the first core spawn. The
+        // admin-restart path keeps its existing post-start re-enable flow.
+        if (
+          process.platform === 'win32' &&
+          !process.argv.includes('--admin-restart-for-tun')
+        ) {
+          await validateTunPermissionsOnStartup(async () => {})
+        }
         const startPromises = await startCoreForStartup()
         if (startPromises.length > 0) {
           startPromises[0].then(async () => {
