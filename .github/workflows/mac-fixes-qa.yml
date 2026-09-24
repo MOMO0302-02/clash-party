@@ -40,7 +40,15 @@ jobs:
           set -euo pipefail
           pkg=$(find dist -maxdepth 1 -name '*.pkg' -print -quit)
           test -n "$pkg"
+          set +e
           sudo installer -pkg "$pkg" -target / > /tmp/clash-party-installer.log 2>&1
+          rc=$?
+          set -e
+          echo "installer rc=$rc"
+          cat /tmp/clash-party-installer.log || true
+          cat /tmp/mihomo-party-install.log || true
+          find /Applications -maxdepth 2 -name '*.app' -print || true
+          test "$rc" -eq 0
           app='/Applications/Clash Party.app'
           core="$app/Contents/Resources/sidecar/mihomo"
           helper='/Library/PrivilegedHelperTools/party.mihomo.helper'
