@@ -6,6 +6,7 @@ import { promisify } from 'util'
 import path from 'path'
 import { app } from 'electron'
 import { exePath, homeDir } from '../utils/dirs'
+import { quoteDesktopExecArg } from '../utils/desktopExec'
 import { managerLogger } from '../utils/logger'
 import { checkAdminPrivileges } from '../core/admin'
 
@@ -218,7 +219,7 @@ export async function enableAutoRun(): Promise<void> {
     let desktop = `
 [Desktop Entry]
 Name=mihomo-party
-Exec=${exePath()} %U
+Exec=${quoteDesktopExecArg(exePath())} %U
 Terminal=false
 Type=Application
 Icon=mihomo-party
