@@ -106,7 +106,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -157,6 +157,18 @@ jobs:
         env:
           PROBE_GUI_SCENARIO: normal
         run: node_modules\.bin\electron.cmd scripts\probes\gui-window-smoke.mjs
+      - name: GUI smoke (silent start, macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        env:
+          PROBE_GUI_SCENARIO: silent
+        run: node_modules/.bin/electron scripts/probes/gui-window-smoke.mjs
+      - name: GUI smoke (control, macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        env:
+          PROBE_GUI_SCENARIO: normal
+        run: node_modules/.bin/electron scripts/probes/gui-window-smoke.mjs
       - name: Assert verdicts
         shell: bash
         run: |
