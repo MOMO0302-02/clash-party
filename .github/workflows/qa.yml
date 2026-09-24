@@ -231,10 +231,24 @@ jobs:
             fi
             echo "desktop-file-validate reported warnings (status $validation_status); continuing"
           fi
+          echo '--- installed app directory ---'
+          find /opt/clash-party -maxdepth 2 -type f -perm -111 -print | sort
+          echo '--- desktop entry ---'
+          cat "$desktop"
           exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
           exec_line=${exec_line%% %*}
-          test -x "$exec_line"
-          printf 'desktop=%s\nexec=%s\n' "$desktop" "$exec_line"
+          resolved=''
+          if [[ "$exec_line" = /* ]] && [ -x "$exec_line" ]; then
+            resolved="$exec_line"
+          elif command -v "$exec_line" >/dev/null 2>&1; then
+            resolved=$(command -v "$exec_line")
+          else
+            resolved=$(find /opt/clash-party -maxdepth 1 -type f -name "$exec_line" -perm -111 | head -1)
+          fi
+          test -n "$resolved"
+          test -x "$resolved"
+          printf '%s\n' "$resolved" > "$RUNNER_TEMP/mihomo-party-exec"
+          printf 'desktop=%s\nexec=%s\nresolved=%s\n' "$desktop" "$exec_line" "$resolved"
       - name: Launch installed app under Xvfb
         shell: bash
         env:
@@ -243,9 +257,7 @@ jobs:
         run: |
           set -u
           mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
-          desktop=$(find /usr/share/applications -maxdepth 1 -type f \( -iname '*mihomo*.desktop' -o -iname '*clash*.desktop' \) | head -1)
-          exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
-          exec_line=${exec_line%% %*}
+          exec_line=$(cat "$RUNNER_TEMP/mihomo-party-exec")
           log="$RUNNER_TEMP/mihomo-party-package-smoke.log"
           set +e
           timeout --signal=TERM 20s xvfb-run -a "$exec_line" >"$log" 2>&1
