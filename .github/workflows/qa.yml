@@ -183,3 +183,76 @@ jobs:
         with:
           name: gui-evidence-${{ matrix.os }}
           path: probe-artifacts/
+
+  linux-package-smoke:
+    name: Linux package install smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Install package build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools desktop-file-utils
+      - name: Prepare sidecar
+        env:
+          npm_config_arch: x64
+          npm_config_target_arch: x64
+        run: pnpm prepare --x64
+      - name: Build deb
+        env:
+          npm_config_arch: x64
+          npm_config_target_arch: x64
+        run: pnpm build:linux --x64
+      - name: Install deb
+        run: sudo apt-get install -y ./dist/*.deb
+      - name: Validate installed desktop entry
+        shell: bash
+        run: |
+          set -euo pipefail
+          dpkg-query -W -f='${Status}\n' mihomo-party
+          desktop=$(find /usr/share/applications -maxdepth 1 -type f \( -iname '*mihomo*.desktop' -o -iname '*clash*.desktop' \) | head -1)
+          test -n "$desktop"
+          desktop-file-validate "$desktop"
+          exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
+          exec_line=${exec_line%% %*}
+          test -x "$exec_line"
+          printf 'desktop=%s\nexec=%s\n' "$desktop" "$exec_line"
+      - name: Launch installed app under Xvfb
+        shell: bash
+        env:
+          XDG_CONFIG_HOME: ${{ runner.temp }}/mihomo-party-package-smoke
+          XDG_CACHE_HOME: ${{ runner.temp }}/mihomo-party-package-cache
+        run: |
+          set -u
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
+          desktop=$(find /usr/share/applications -maxdepth 1 -type f \( -iname '*mihomo*.desktop' -o -iname '*clash*.desktop' \) | head -1)
+          exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
+          exec_line=${exec_line%% %*}
+          log="$RUNNER_TEMP/mihomo-party-package-smoke.log"
+          set +e
+          timeout --signal=TERM 20s xvfb-run -a "$exec_line" >"$log" 2>&1
+          status=$?
+          set -e
+          cat "$log"
+          pkill -TERM -f "$exec_line" 2>/dev/null || true
+          case "$status" in
+            0|124|143) exit 0 ;;
+            *) exit "$status" ;;
+          esac
+      - name: Upload package smoke log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-package-smoke-log
+          path: ${{ runner.temp }}/mihomo-party-package-smoke.log
+          if-no-files-found: ignore
