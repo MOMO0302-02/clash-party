@@ -7,16 +7,16 @@ if type update-alternatives >/dev/null 2>&1; then
     if [ -L '/usr/bin/clash-party' ] && [ -e '/usr/bin/clash-party' ] && [ "$(readlink '/usr/bin/clash-party')" != '/etc/alternatives/clash-party' ]; then
         rm -f '/usr/bin/clash-party'
     fi
-    update-alternatives --install '/usr/bin/clash-party' 'clash-party' '/opt/${productName}/mihomo-party' 100 || ln -sf '/opt/${productName}/mihomo-party' '/usr/bin/clash-party'
+    update-alternatives --install '/usr/bin/clash-party' 'clash-party' '/opt/${sanitizedProductName}/mihomo-party' 100 || ln -sf '/opt/${sanitizedProductName}/mihomo-party' '/usr/bin/clash-party'
 else
-    ln -sf '/opt/${productName}/mihomo-party' '/usr/bin/clash-party'
+    ln -sf '/opt/${sanitizedProductName}/mihomo-party' '/usr/bin/clash-party'
 fi
 
-chmod 4755 '/opt/${productName}/chrome-sandbox' 2>/dev/null || true
+chmod 4755 '/opt/${sanitizedProductName}/chrome-sandbox' 2>/dev/null || true
 
-chmod +sx '/opt/${productName}/resources/sidecar/mihomo' 2>/dev/null || true
-chmod +sx '/opt/${productName}/resources/sidecar/mihomo-alpha' 2>/dev/null || true
-chmod +sx '/opt/${productName}/resources/sidecar/mihomo-smart' 2>/dev/null || true
+chmod +sx '/opt/${sanitizedProductName}/resources/sidecar/mihomo' 2>/dev/null || true
+chmod +sx '/opt/${sanitizedProductName}/resources/sidecar/mihomo-alpha' 2>/dev/null || true
+chmod +sx '/opt/${sanitizedProductName}/resources/sidecar/mihomo-smart' 2>/dev/null || true
 
 if hash update-mime-database 2>/dev/null; then
     update-mime-database /usr/share/mime || true
