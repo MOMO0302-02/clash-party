@@ -126,15 +126,13 @@ if [ "$macos_major" -ge 11 ]; then
     if ! launchctl bootstrap system "$LAUNCH_DAEMON"; then
         log "Bootstrap failed, trying legacy load..."
         if ! launchctl load "$LAUNCH_DAEMON"; then
-            log "Error: Failed to load service with both methods"
-            exit 1
+            log "Warning: Failed to load service with both methods, the app will retry on demand"
         fi
     fi
 else
     # 旧版本使用 load
     if ! launchctl load "$LAUNCH_DAEMON"; then
-        log "Error: Failed to load service"
-        exit 1
+        log "Warning: Failed to load service, the app will retry on demand"
     fi
 fi
 

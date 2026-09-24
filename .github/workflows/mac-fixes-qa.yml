@@ -1,0 +1,61 @@
+name: macOS fixes QA
+
+on:
+  push:
+    branches:
+      - qa/mac-fixes-20260924
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-smoke:
+    name: macOS package build and install smoke
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install
+      - name: Prepare arm64 sidecars
+        run: pnpm prepare --arm64
+      - name: Build macOS package without signing
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          pnpm exec electron-vite build
+          pnpm exec electron-builder --publish never --mac pkg --arm64
+      - name: Install package and verify helper/core paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg=$(find dist -maxdepth 1 -name '*.pkg' -print -quit)
+          test -n "$pkg"
+          sudo installer -pkg "$pkg" -target / > /tmp/clash-party-installer.log 2>&1
+          app='/Applications/Clash Party.app'
+          core="$app/Contents/Resources/sidecar/mihomo"
+          helper='/Library/PrivilegedHelperTools/party.mihomo.helper'
+          plist='/Library/LaunchDaemons/party.mihomo.helper.plist'
+          test -x "$core"
+          test -f "$helper"
+          test -f "$plist"
+          stat -f 'core=%Sp owner=%Su:%Sg flags=%Sf' "$core"
+          plutil -lint "$plist"
+          grep -F 'chmod +sx' src/main/core/permissions.ts
+          grep -F 'the app will retry on demand' build/pkg-scripts/postinstall
+      - name: Upload installer log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-package-installer-log
+          path: /tmp/clash-party-installer.log
+          if-no-files-found: ignore
