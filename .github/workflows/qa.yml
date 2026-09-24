@@ -237,8 +237,13 @@ jobs:
           find /opt -maxdepth 3 -type f -perm -111 -print 2>/dev/null | sort || true
           echo '--- desktop entry ---'
           cat "$desktop"
-          exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
-          exec_line=${exec_line%% %*}
+          raw_exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
+          if [[ "$raw_exec_line" == \"*\"* ]]; then
+            exec_line=${raw_exec_line#\"}
+            exec_line=${exec_line%%\"*}
+          else
+            exec_line=${raw_exec_line%% *}
+          fi
           resolved=''
           if [[ "$exec_line" = /* ]] && [ -x "$exec_line" ]; then
             resolved="$exec_line"
