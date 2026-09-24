@@ -254,6 +254,8 @@ jobs:
           fi
           test -n "$resolved"
           test -x "$resolved"
+          case "$exec_line" in *" "*) echo "desktop Exec path contains spaces: $exec_line"; exit 1 ;; esac
+          test "$(readlink -f /usr/bin/clash-party)" = "$resolved"
           printf '%s\n' "$resolved" > "$RUNNER_TEMP/mihomo-party-exec"
           printf 'desktop=%s\nexec=%s\nresolved=%s\n' "$desktop" "$exec_line" "$resolved"
       - name: Launch installed app under Xvfb
@@ -265,8 +267,6 @@ jobs:
           set -u
           mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
           exec_line=$(cat "$RUNNER_TEMP/mihomo-party-exec")
-          launch_path="$RUNNER_TEMP/mihomo-party-launcher"
-          ln -sf "$exec_line" "$launch_path"
           log="$RUNNER_TEMP/mihomo-party-package-smoke.log"
           set +e
           timeout --signal=TERM 20s xvfb-run -a "$exec_line" >"$log" 2>&1
@@ -278,6 +278,10 @@ jobs:
             0|124|143) exit 0 ;;
             *) exit "$status" ;;
           esac
+      - name: Uninstall package
+        run: |
+          sudo apt-get remove -y mihomo-party
+          test ! -e /usr/bin/clash-party
       - name: Upload package smoke log
         if: always()
         uses: actions/upload-artifact@v6
