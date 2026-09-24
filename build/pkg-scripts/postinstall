@@ -37,25 +37,40 @@ chown root:wheel "/Library/PrivilegedHelperTools"
 # 设置核心文件权限
 log "Setting core file permissions..."
 if [ -f "$APP_PATH/Contents/Resources/sidecar/mihomo" ]; then
-    chown root:admin "$APP_PATH/Contents/Resources/sidecar/mihomo"
-    chmod +s "$APP_PATH/Contents/Resources/sidecar/mihomo"
-    log "Set permissions for mihomo"
+    if ! chown root:admin "$APP_PATH/Contents/Resources/sidecar/mihomo"; then
+        log "Warning: unable to set owner for mihomo; continuing"
+    fi
+    if ! chmod +s "$APP_PATH/Contents/Resources/sidecar/mihomo"; then
+        log "Warning: unable to set setuid for mihomo; continuing"
+    else
+        log "Set permissions for mihomo"
+    fi
 else
     log "Warning: mihomo binary not found at $APP_PATH/Contents/Resources/sidecar/mihomo"
 fi
 
 if [ -f "$APP_PATH/Contents/Resources/sidecar/mihomo-alpha" ]; then
-    chown root:admin "$APP_PATH/Contents/Resources/sidecar/mihomo-alpha"
-    chmod +s "$APP_PATH/Contents/Resources/sidecar/mihomo-alpha"
-    log "Set permissions for mihomo-alpha"
+    if ! chown root:admin "$APP_PATH/Contents/Resources/sidecar/mihomo-alpha"; then
+        log "Warning: unable to set owner for mihomo-alpha; continuing"
+    fi
+    if ! chmod +s "$APP_PATH/Contents/Resources/sidecar/mihomo-alpha"; then
+        log "Warning: unable to set setuid for mihomo-alpha; continuing"
+    else
+        log "Set permissions for mihomo-alpha"
+    fi
 else
     log "Warning: mihomo-alpha binary not found at $APP_PATH/Contents/Resources/sidecar/mihomo-alpha"
 fi
 
 if [ -f "$APP_PATH/Contents/Resources/sidecar/mihomo-smart" ]; then
-    chown root:admin "$APP_PATH/Contents/Resources/sidecar/mihomo-smart"
-    chmod +s "$APP_PATH/Contents/Resources/sidecar/mihomo-smart"
-    log "Set permissions for mihomo-smart"
+    if ! chown root:admin "$APP_PATH/Contents/Resources/sidecar/mihomo-smart"; then
+        log "Warning: unable to set owner for mihomo-smart; continuing"
+    fi
+    if ! chmod +s "$APP_PATH/Contents/Resources/sidecar/mihomo-smart"; then
+        log "Warning: unable to set setuid for mihomo-smart; continuing"
+    else
+        log "Set permissions for mihomo-smart"
+    fi
 else
     log "Warning: mihomo-smart binary not found at $APP_PATH/Contents/Resources/sidecar/mihomo-smart"
 fi
