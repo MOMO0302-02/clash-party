@@ -265,9 +265,11 @@ jobs:
           set -u
           mkdir -p "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
           exec_line=$(cat "$RUNNER_TEMP/mihomo-party-exec")
+          launch_path="$RUNNER_TEMP/mihomo-party-launcher"
+          ln -sf "$exec_line" "$launch_path"
           log="$RUNNER_TEMP/mihomo-party-package-smoke.log"
           set +e
-          timeout --signal=TERM 20s xvfb-run -a "$exec_line" >"$log" 2>&1
+          timeout --signal=TERM 20s xvfb-run -a "$launch_path" >"$log" 2>&1
           status=$?
           set -e
           cat "$log"
