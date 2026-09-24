@@ -231,8 +231,10 @@ jobs:
             fi
             echo "desktop-file-validate reported warnings (status $validation_status); continuing"
           fi
-          echo '--- installed app directory ---'
-          find /opt/clash-party -maxdepth 2 -type f -perm -111 -print | sort
+          echo '--- installed package files ---'
+          dpkg -L mihomo-party | sed -n '1,160p'
+          echo '--- installed /opt entries ---'
+          find /opt -maxdepth 3 -type f -perm -111 -print 2>/dev/null | sort || true
           echo '--- desktop entry ---'
           cat "$desktop"
           exec_line=$(sed -n 's/^Exec=//p' "$desktop" | head -1)
@@ -243,7 +245,7 @@ jobs:
           elif command -v "$exec_line" >/dev/null 2>&1; then
             resolved=$(command -v "$exec_line")
           else
-            resolved=$(find /opt/clash-party -maxdepth 1 -type f -name "$exec_line" -perm -111 | head -1)
+            resolved=$(find /opt -maxdepth 3 -type f -name "$exec_line" -perm -111 2>/dev/null | head -1 || true)
           fi
           test -n "$resolved"
           test -x "$resolved"
