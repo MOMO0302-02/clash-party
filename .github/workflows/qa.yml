@@ -269,7 +269,7 @@ jobs:
           ln -sf "$exec_line" "$launch_path"
           log="$RUNNER_TEMP/mihomo-party-package-smoke.log"
           set +e
-          timeout --signal=TERM 20s xvfb-run -a "$launch_path" >"$log" 2>&1
+          timeout --signal=TERM 20s xvfb-run -a "$exec_line" >"$log" 2>&1
           status=$?
           set -e
           cat "$log"
