@@ -24,8 +24,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Verify package script executable mode
+        shell: bash
+        run: test "$(git ls-tree HEAD -- build/pkg-scripts/postinstall | awk '{print $1}')" = 100755
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --ignore-scripts
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
       - name: Prepare arm64 sidecars
         run: pnpm prepare --arm64
       - name: Build macOS package without signing
